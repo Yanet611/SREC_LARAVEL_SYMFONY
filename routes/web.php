@@ -12,6 +12,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\RendezVousController;
 use App\Http\Controllers\StatistiqueController;
 use App\Http\Controllers\ArchiveController;
+use App\Http\Controllers\LogController;
 use Illuminate\Support\Facades\Route;
 
 // ── Accueil → redirection vers login ─────────────────────────────────────────
@@ -27,6 +28,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dashboard/secretariat', [DashboardController::class, 'secretariat'])
         ->middleware('role:secretariat|admin')->name('dashboard.secretariat');
 
+    // Courriers — création & modification : secrétariat uniquement
+    Route::group(['middleware' => ['role:secretariat']], function () {
+        Route::resource('courriers', CourrierController::class)->only(['create', 'store', 'edit', 'update']);
+        Route::get('courriers/convocation/{rendez_vous}', [CourrierController::class, 'convocationRdv'])
+            ->name('courriers.convocation');
+    });
+
     // Courriers — consultation & statuts : tous les rôles
     Route::group(['middleware' => ['role:admin|directrice|recteur|secretariat']], function () {
         Route::resource('courriers', CourrierController::class)->only(['index', 'show']);
@@ -36,25 +44,28 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('courriers.archiver');
     });
 
-    // Courriers — création & modification : secrétariat uniquement
-    Route::group(['middleware' => ['role:secretariat']], function () {
-        Route::resource('courriers', CourrierController::class)->only(['create', 'store', 'edit', 'update']);
-        Route::get('courriers/convocation/{rendez_vous}', [CourrierController::class, 'convocationRdv'])
-            ->name('courriers.convocation');
+    // Partenaires — création & modification : directrice uniquement (pas le recteur)
+    Route::group(['middleware' => ['role:admin|directrice']], function () {
+        Route::resource('partenaires', PartenaireController::class)->only(['create', 'store', 'edit', 'update']);
+    });
+    // Partenaires — lecture : directrice et recteur
+    Route::group(['middleware' => ['role:admin|directrice|recteur']], function () {
+        Route::resource('partenaires', PartenaireController::class)->only(['index', 'show']);
     });
 
-    // Partenaires
-    Route::group(['middleware' => ['role:admin|directrice|recteur']], function () {
-        Route::resource('partenaires', PartenaireController::class)->except(['destroy']);
-    });
-
-    // Conventions
-    Route::group(['middleware' => ['role:admin|directrice|recteur']], function () {
-        Route::resource('conventions', ConventionController::class)->except(['destroy']);
-        Route::post('conventions/{convention}/statut', [ConventionController::class, 'changerStatut'])
-            ->name('conventions.statut');
+    // Conventions — création & modification : directrice uniquement (pas le recteur)
+    Route::group(['middleware' => ['role:admin|directrice']], function () {
+        Route::resource('conventions', ConventionController::class)->only(['create', 'store', 'edit', 'update']);
         Route::post('conventions/brouillon/{courrier}', [ConventionController::class, 'genererBrouillon'])
             ->name('conventions.brouillon');
+    });
+    // Conventions — lecture & actions de statut : directrice et recteur
+    Route::group(['middleware' => ['role:admin|directrice|recteur']], function () {
+        Route::resource('conventions', ConventionController::class)->only(['index', 'show']);
+        Route::post('conventions/{convention}/statut', [ConventionController::class, 'changerStatut'])
+            ->name('conventions.statut');
+        Route::post('conventions/{convention}/signer', [ConventionController::class, 'signer'])
+            ->name('conventions.signer');
     });
 
     // Activités
@@ -62,9 +73,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::resource('activites', ActiviteController::class);
     });
 
-    // Mobilités
+    // Mobilités — création, modification & suppression : directrice uniquement (pas le recteur)
+    Route::group(['middleware' => ['role:admin|directrice']], function () {
+        Route::resource('mobilites', MobiliteController::class)->only(['create', 'store', 'edit', 'update', 'destroy']);
+    });
+    // Mobilités — lecture : directrice et recteur
     Route::group(['middleware' => ['role:admin|directrice|recteur']], function () {
-        Route::resource('mobilites', MobiliteController::class);
+        Route::resource('mobilites', MobiliteController::class)->only(['index', 'show']);
     });
 
     // Rendez-vous & Rapports
@@ -84,10 +99,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('archives.index')
         ->middleware('role:admin|directrice');
 
-    // Administration (utilisateurs) — réservé admin
-    Route::resource('users', UserController::class)
-        ->middleware('role:admin')
-        ->except(['show']);
+    // Administration (utilisateurs & logs) — réservé admin
+    Route::group(['middleware' => ['role:admin']], function () {
+        Route::resource('users', UserController::class)->except(['show']);
+        Route::get('/logs', [LogController::class, 'index'])->name('logs.index');
+    });
 
     // Notifications (JSON)
     Route::prefix('api')->group(function () {

@@ -32,12 +32,13 @@ class ActiviteController extends Controller
         ]);
     }
 
-    public function create(): Response
+    public function create(Request $request): Response
     {
         return Inertia::render('Activites/Create', [
-            'conventions' => Convention::whereIn('statut', ['approuvee', 'signee'])
+            'conventions'           => Convention::whereIn('statut', ['approuvee', 'signee'])
                 ->orderByDesc('id')
                 ->get(['id', 'reference', 'intitule']),
+            'convention_id_predefini' => $request->convention_id,
         ]);
     }
 

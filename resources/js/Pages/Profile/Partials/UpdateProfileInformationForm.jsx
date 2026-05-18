@@ -8,15 +8,17 @@ export default function UpdateProfileInformation({
 }) {
     const user = usePage().props.auth.user;
 
-    const { data, setData, patch, errors, processing, recentlySuccessful } =
+    const { data, setData, post, errors, processing, recentlySuccessful } =
         useForm({
             name: user.name,
             email: user.email,
+            avatar: null,
+            _method: 'patch',
         });
 
     const submit = (e) => {
         e.preventDefault();
-        patch(route('profile.update'));
+        post(route('profile.update'), { preserveScroll: true, forceFormData: true });
     };
 
     return (
@@ -25,7 +27,28 @@ export default function UpdateProfileInformation({
                 Mettez à jour les informations de votre profil et votre adresse e-mail.
             </p>
 
-            <form onSubmit={submit} className="space-y-4">
+            <form onSubmit={submit} className="space-y-4" encType="multipart/form-data">
+                <div className="flex items-center gap-6 mb-6">
+                    <div className="relative group">
+                        <div className="w-20 h-20 rounded-full bg-slate-800 p-0.5 border border-white/10 group-hover:border-srec-400/50 transition-colors shadow-lg overflow-hidden">
+                            {data.avatar ? (
+                                <img src={URL.createObjectURL(data.avatar)} className="w-full h-full rounded-full object-cover" alt="Preview" />
+                            ) : (
+                                <img src={user.avatar_url} className="w-full h-full rounded-full object-cover" alt={user.name} />
+                            )}
+                        </div>
+                        <label className="absolute inset-0 flex items-center justify-center bg-black/50 text-white opacity-0 group-hover:opacity-100 cursor-pointer rounded-full transition-opacity text-xs font-medium">
+                            Modifier
+                            <input type="file" className="hidden" accept="image/*" onChange={e => setData('avatar', e.target.files[0])} />
+                        </label>
+                    </div>
+                    <div>
+                        <h4 className="text-sm font-medium text-white">Photo de profil</h4>
+                        <p className="text-xs text-slate-400 mt-1">Cliquez sur l'image pour la modifier. JPG, PNG (Max. 2MB)</p>
+                        {errors.avatar && <p className="text-xs text-red-400 mt-1">{errors.avatar}</p>}
+                    </div>
+                </div>
+
                 <div className="form-group">
                     <label htmlFor="name" className="label">Nom complet</label>
                     <input

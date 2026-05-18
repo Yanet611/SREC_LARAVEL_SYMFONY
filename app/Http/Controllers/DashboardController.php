@@ -131,12 +131,49 @@ class DashboardController extends Controller
             ->take(10)
             ->get();
 
+        // ── Alertes d'inactivité (bloqués > 48h) ───────────────────────────────────
+        $seuilH = 48;
+        $courriersBlockes = [];
+        if ($user->estDirectrice() || $user->estAdmin()) {
+            $courriersBlockes = Courrier::actifs()
+                ->whereIn('statut', ['soumis_directrice', 'examine_directrice'])
+                ->where('updated_at', '<', now()->subHours($seuilH))
+                ->latest()
+                ->take(10)
+                ->get()
+                ->map(fn($c) => [
+                    'id'       => $c->id,
+                    'numero'   => $c->numero,
+                    'objet'    => $c->objet,
+                    'statut'   => $c->statut_label,
+                    'heures'   => (int) now()->diffInHours($c->updated_at),
+                ])
+                ->values();
+        }
+        if ($user->estSecretariat()) {
+            $courriersBlockes = Courrier::actifs()
+                ->whereIn('statut', ['soumis_directrice', 'examine_directrice', 'soumis_recteur'])
+                ->where('updated_at', '<', now()->subHours($seuilH))
+                ->latest()
+                ->take(10)
+                ->get()
+                ->map(fn($c) => [
+                    'id'       => $c->id,
+                    'numero'   => $c->numero,
+                    'objet'    => $c->objet,
+                    'statut'   => $c->statut_label,
+                    'heures'   => (int) now()->diffInHours($c->updated_at),
+                ])
+                ->values();
+        }
+
         return Inertia::render('Dashboard', [
             'kpis'             => $kpis,
             'fileAction'       => $fileAction->values(),
             'courriersParMois' => $courriersParMois,
             'activiteRecente'  => $activiteRecente,
             'notifications'    => $notifs,
+            'courriersBlockes' => $courriersBlockes,
             'userRole'         => $user->roles->first()?->name ?? 'inconnu',
         ]);
     }
@@ -159,13 +196,71 @@ class DashboardController extends Controller
                 'soumis_par' => $conv->soumisePar?->name, 'partenaire' => $conv->partenaire->nom,
             ]));
 
+        // ── Statistiques avancées Executive Dashboard ─────────────────────
+        $totalTraites = Courrier::whereIn('statut', ['valide', 'rejete'])->count();
+        $totalValides  = Courrier::where('statut', 'valide')->count();
+        $tauxValidation = $totalTraites > 0 ? round(($totalValides / $totalTraites) * 100) : 0;
+
+        // Top 5 partenaires par nb de conventions
+        $topPartenaires = Partenaire::withCount('conventions')
+            ->orderByDesc('conventions_count')
+            ->take(5)
+            ->get()
+            ->map(fn($p) => [
+                'nom'    => $p->nom,
+                'sigle'  => $p->sigle,
+                'pays'   => $p->pays,
+                'count'  => $p->conventions_count,
+            ]);
+
+        // Évolution conventions signées (5 dernières années)
+        $evolutionConventions = [];
+        for ($i = 4; $i >= 0; $i--) {
+            $annee = now()->subYears($i)->year;
+            $evolutionConventions[] = [
+                'annee' => $annee,
+                'count' => Convention::where('statut', 'signee')->whereYear('date_signature', $annee)->count(),
+            ];
+        }
+
+        // Répartition types de courriers entrants
+        $repartitionTypes = [
+            ['type' => 'Demande partenariat', 'count' => Courrier::where('type','demande_partenariat')->where('sens','entrant')->count()],
+            ['type' => 'Demande convention',  'count' => Courrier::where('type','demande_convention')->where('sens','entrant')->count()],
+            ['type' => 'Invitation',           'count' => Courrier::where('type','invitation')->where('sens','entrant')->count()],
+            ['type' => 'Information',          'count' => Courrier::where('type','information')->where('sens','entrant')->count()],
+        ];
+
+        // Conventions expirant dans < 30 jours
+        $conventionsExpirant = Convention::where('statut', 'signee')
+            ->whereNotNull('date_fin')
+            ->whereDate('date_fin', '>=', today())
+            ->whereDate('date_fin', '<=', today()->addDays(30))
+            ->with('partenaire')
+            ->get()
+            ->map(fn($c) => [
+                'id'         => $c->id,
+                'reference'  => $c->reference,
+                'intitule'   => $c->intitule,
+                'partenaire' => $c->partenaire?->nom,
+                'date_fin'   => $c->date_fin->format('d/m/Y'),
+                'jours'      => (int) today()->diffInDays($c->date_fin),
+            ])
+            ->values();
+
         return Inertia::render('Dashboard/Recteur', [
-            'fileDecision' => $fileDecision->values(),
+            'fileDecision'         => $fileDecision->values(),
             'stats' => [
-                'en_attente' => $fileDecision->count(),
-                'traites_mois' => Courrier::where('statut', 'valide')
-                    ->whereMonth('updated_at', now()->month)->count(),
+                'en_attente'       => $fileDecision->count(),
+                'traites_mois'     => Courrier::where('statut', 'valide')->whereMonth('updated_at', now()->month)->count(),
+                'taux_validation'  => $tauxValidation,
+                'conventions_signees' => Convention::where('statut', 'signee')->count(),
+                'partenaires_actifs'  => Partenaire::actifs()->count(),
             ],
+            'topPartenaires'       => $topPartenaires,
+            'evolutionConventions' => $evolutionConventions,
+            'repartitionTypes'     => $repartitionTypes,
+            'conventionsExpirant'  => $conventionsExpirant,
         ]);
     }
 

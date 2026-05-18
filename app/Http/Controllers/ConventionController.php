@@ -71,11 +71,42 @@ class ConventionController extends Controller
         return redirect()->route('conventions.show', $convention)
             ->with('success', "Convention {$convention->reference} créée.");
     }
+    public function edit(Convention $convention): Response
+    {
+        return Inertia::render('Conventions/Edit', [
+            'convention' => $convention,
+            'partenaires' => Partenaire::actifs()->orderBy('nom')->get(['id', 'nom', 'sigle', 'pays']),
+        ]);
+    }
+
+    public function update(Request $request, Convention $convention): RedirectResponse
+    {
+        $validated = $request->validate([
+            'intitule'       => 'required|string|max:255',
+            'type'           => 'required|in:accord_cadre,memorandum,accord_specifique,protocole,autre',
+            'date_debut'     => 'nullable|date',
+            'date_fin'       => 'nullable|date|after:date_debut',
+            'reconductible'  => 'boolean',
+            'description'    => 'nullable|string',
+            'document_pdf'   => 'nullable|file|mimes:pdf|max:20480',
+        ]);
+
+        if ($request->hasFile('document_pdf')) {
+            $validated['document_pdf'] = $request->file('document_pdf')->store('conventions', 'public');
+        }
+
+        $convention->update($validated);
+        Historique::enregistrer($convention, 'updated', null, null, 'Informations de la convention modifiées');
+
+        return redirect()->route('conventions.show', $convention)
+            ->with('success', "Convention {$convention->reference} mise à jour.");
+    }
+
 
     public function show(Convention $convention): Response
     {
         $convention->load('partenaire', 'creeePar', 'soumisePar', 'decideePar', 'activites', 'mobilites');
-        $historique = $convention->historiques()->with('user')->latest('created_at')->get()
+        $historique = $convention->historiques()->with('user')->oldest('created_at')->get()
             ->map(fn($h) => [
                 'id'             => $h->id,
                 'action'         => $h->action,
@@ -152,5 +183,49 @@ class ConventionController extends Controller
 
         return redirect()->route('conventions.edit', $convention->id)
             ->with('success', 'Brouillon de convention généré. Veuillez compléter les informations.');
+    }
+
+    public function signer(Convention $convention): RedirectResponse
+    {
+        $user = auth()->user();
+
+        // Seul le Recteur ou l'admin peut signer
+        if (!$user->hasRole('recteur') && !$user->hasRole('admin')) {
+            abort(403, 'Seul le Recteur peut apposer sa signature électronique.');
+        }
+
+        // La convention doit être approuvée
+        if ($convention->statut !== 'approuvee') {
+            return back()->with('error', 'Seule une convention approuvée peut être signée électroniquement.');
+        }
+
+        // Générer un token unique de vérification
+        $token = hash('sha256', $convention->reference . now()->timestamp . $user->name . config('app.key'));
+
+        $convention->update([
+            'signe_par'                  => $user->id,
+            'date_signature_electronique' => now(),
+            'signature_token'             => $token,
+            'statut'                      => 'signee',
+        ]);
+
+        Historique::enregistrer($convention, 'signed', 'approuvee', 'signee',
+            "Convention signée électroniquement par {$user->name}. Token : {$token}");
+
+        // Notifier la Directrice et le Secrétariat
+        $notifyRoles = ['directrice', 'secretariat'];
+        foreach ($notifyRoles as $role) {
+            foreach (User::role($role)->get() as $dest) {
+                NotificationSrec::envoyer(
+                    $dest->id,
+                    "Convention {$convention->reference} — Signée",
+                    "Le Recteur a apposé sa signature électronique sur la convention « {$convention->intitule} ». Elle est désormais officiellement en vigueur.",
+                    'info', 'haute', $convention
+                );
+            }
+        }
+
+        return redirect()->route('conventions.show', $convention)
+            ->with('success', "Signature électronique apposée sur {$convention->reference}. La convention est maintenant en vigueur.");
     }
 }

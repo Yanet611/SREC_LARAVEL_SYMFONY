@@ -87,8 +87,8 @@ export default function Index({ users, roles, filtres }) {
                                 {/* Top row */}
                                 <div className="flex items-start justify-between">
                                     <div className="flex items-center gap-3">
-                                        <div className={`w-11 h-11 rounded-xl ${meta.bg} flex items-center justify-center flex-shrink-0`}>
-                                            <RoleIcon size={20} className={meta.color} />
+                                        <div className={`w-11 h-11 rounded-full overflow-hidden ${meta.bg} flex items-center justify-center flex-shrink-0 border border-white/10 p-[2px]`}>
+                                            <img src={u.avatar_url} alt={u.name} className="w-full h-full rounded-full object-cover" />
                                         </div>
                                         <div className="min-w-0">
                                             <p className="font-semibold text-white text-sm truncate">{u.name}</p>

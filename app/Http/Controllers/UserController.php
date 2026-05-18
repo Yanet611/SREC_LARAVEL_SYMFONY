@@ -48,9 +48,10 @@ class UserController extends Controller
             'fonction'  => 'nullable|string|max:255',
             'service'   => 'nullable|string|max:255',
             'role'      => 'required|exists:roles,name',
+            'avatar'    => 'nullable|image|mimes:jpeg,png,jpg,gif,svg,webp|max:2048',
         ]);
 
-        $user = User::create([
+        $userData = [
             'name'      => $validated['name'],
             'email'     => $validated['email'],
             'password'  => Hash::make($validated['password']),
@@ -58,7 +59,13 @@ class UserController extends Controller
             'fonction'  => $validated['fonction'] ?? null,
             'service'   => $validated['service'] ?? null,
             'actif'     => true,
-        ]);
+        ];
+
+        if ($request->hasFile('avatar')) {
+            $userData['avatar'] = $request->file('avatar')->store('avatars', 'public');
+        }
+
+        $user = User::create($userData);
 
         $user->syncRoles([$validated['role']]);
 
@@ -86,6 +93,7 @@ class UserController extends Controller
             'service'   => 'nullable|string|max:255',
             'role'      => 'required|exists:roles,name',
             'actif'     => 'boolean',
+            'avatar'    => 'nullable|image|mimes:jpeg,png,jpg,gif,svg,webp|max:2048',
         ]);
 
         $updateData = [
@@ -99,6 +107,13 @@ class UserController extends Controller
 
         if (!empty($validated['password'])) {
             $updateData['password'] = Hash::make($validated['password']);
+        }
+
+        if ($request->hasFile('avatar')) {
+            if ($user->avatar) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($user->avatar);
+            }
+            $updateData['avatar'] = $request->file('avatar')->store('avatars', 'public');
         }
 
         $user->update($updateData);

@@ -36,6 +36,7 @@ const navItems = [
         section: 'Administration',
         items: [
             { label: 'Utilisateurs', icon: Users, route: 'users.index', roles: ['admin'] },
+            { label: 'Logs Système', icon: Shield, route: 'logs.index', roles: ['admin'] },
         ]
     },
 ];
@@ -361,11 +362,18 @@ export default function AppLayout({ children, title }) {
                                     </div>
                                 </div>
                             )}
-
-                        {/* Avatar */}
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-srec-600 to-blue-800 flex items-center justify-center text-xs font-bold text-white">
-                            {user?.name?.[0] ?? 'U'}
                         </div>
+
+                        {/* Avatar Premium */}
+                        <Link href={route('profile.edit')} className="group relative">
+                            <div className="w-9 h-9 rounded-full bg-slate-800 p-0.5 border border-white/10 group-hover:border-srec-400/50 transition-colors shadow-lg shadow-black/20">
+                                <img
+                                    src={user?.avatar_url}
+                                    alt={user?.name}
+                                    className="w-full h-full rounded-full object-cover"
+                                />
+                            </div>
+                        </Link>
                     </div>
                 </header>
 

@@ -1,5 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { StatusBadge, EmptyState, Pagination } from '@/Components/Ui';
 import { useState } from 'react';
 import { Handshake, Plus, Search, Globe, Building2, Filter, X, GraduationCap, HeartHandshake, Landmark, Briefcase, ClipboardList } from 'lucide-react';
@@ -15,6 +15,8 @@ const TYPE_ICONS = {
 };
 
 export default function Index({ partenaires, filtres }) {
+    const { auth } = usePage().props;
+    const isRecteur = auth?.user?.roles?.[0]?.name === 'recteur';
     const [search, setSearch] = useState(filtres.search ?? '');
     const [nature, setNature] = useState(filtres.nature ?? '');
 
@@ -30,9 +32,11 @@ export default function Index({ partenaires, filtres }) {
                     <h2 className="page-title">Partenaires institutionnels</h2>
                     <p className="page-subtitle">{partenaires.total} partenaire{partenaires.total > 1 ? 's' : ''} enregistré{partenaires.total > 1 ? 's' : ''}</p>
                 </div>
-                <Link href={route('partenaires.create')} className="btn-primary">
-                    <Plus size={15} /> Nouveau partenaire
-                </Link>
+                {!isRecteur && (
+                    <Link href={route('partenaires.create')} className="btn-primary">
+                        <Plus size={15} /> Nouveau partenaire
+                    </Link>
+                )}
             </div>
 
             {/* Filtres */}
@@ -53,15 +57,19 @@ export default function Index({ partenaires, filtres }) {
             {/* Cards */}
             {partenaires.data.length === 0 ? (
                 <div className="card-glass p-4">
-                    <EmptyState icon={Handshake} title="Aucun partenaire" description="Aucun partenaire ne correspond à vos critères." action={<Link href={route('partenaires.create')} className="btn-primary"><Plus size={14} /> Ajouter</Link>} />
+                    <EmptyState icon={Handshake} title="Aucun partenaire" description="Aucun partenaire ne correspond à vos critères." action={!isRecteur && <Link href={route('partenaires.create')} className="btn-primary"><Plus size={14} /> Ajouter</Link>} />
                 </div>
             ) : (
                 <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
                     {partenaires.data.map(p => (
                         <Link key={p.id} href={route('partenaires.show', p.id)} className="card-glass p-5 hover:border-white/20 transition-all duration-200 group block hover:lift">
                             <div className="flex items-start gap-4">
-                                <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center flex-shrink-0">
-                                    {TYPE_ICONS[p.type] ?? TYPE_ICONS['autre']}
+                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center flex-shrink-0 border border-white/10 overflow-hidden shadow-inner">
+                                    {p.logo_url ? (
+                                        <img src={p.logo_url} alt={p.nom} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <span className="font-bold text-lg text-white/50">{p.sigle ? p.sigle.substring(0, 2) : p.nom.substring(0, 2).toUpperCase()}</span>
+                                    )}
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <h3 className="font-semibold text-white text-sm truncate group-hover:text-srec-300 transition-colors">{p.nom}</h3>

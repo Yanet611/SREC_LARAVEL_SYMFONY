@@ -57,7 +57,12 @@ class PartenaireController extends Controller
             'contact_email'    => 'nullable|email|max:255',
             'contact_telephone'=> 'nullable|string|max:50',
             'notes'            => 'nullable|string',
+            'logo'             => 'nullable|image|max:2048', // 2MB max
         ]);
+
+        if ($request->hasFile('logo')) {
+            $validated['logo'] = $request->file('logo')->store('partenaires_logos', 'public');
+        }
 
         $partenaire = Partenaire::create($validated);
 
@@ -96,7 +101,16 @@ class PartenaireController extends Controller
             'contact_email'    => 'nullable|email|max:255',
             'statut'           => 'required|in:actif,inactif,suspendu',
             'notes'            => 'nullable|string',
+            'logo'             => 'nullable|image|max:2048', // 2MB max
         ]);
+
+        if ($request->hasFile('logo')) {
+            // Delete old logo if exists
+            if ($partenaire->logo) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($partenaire->logo);
+            }
+            $validated['logo'] = $request->file('logo')->store('partenaires_logos', 'public');
+        }
 
         $partenaire->update($validated);
 

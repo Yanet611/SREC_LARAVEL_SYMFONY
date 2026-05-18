@@ -3,7 +3,7 @@ import { Head, Link } from '@inertiajs/react';
 import { KpiCard, StatusBadge } from '@/Components/Ui';
 import {
     Mail, Handshake, FileText, Plane, Clock,
-    TrendingUp, ArrowRight, AlertCircle, CheckCircle2
+    TrendingUp, ArrowRight, AlertCircle, CheckCircle2, AlertTriangle
 } from 'lucide-react';
 import {
     ResponsiveContainer, BarChart, Bar, XAxis, YAxis,
@@ -24,7 +24,7 @@ const CustomTooltip = ({ active, payload, label }) => {
     );
 };
 
-export default function Dashboard({ kpis, fileAction, courriersParMois, activiteRecente, notifications, userRole }) {
+export default function Dashboard({ kpis, fileAction, courriersParMois, activiteRecente, notifications, userRole, courriersBlockes = [] }) {
     return (
         <AppLayout title="Tableau de bord">
             <Head title="Tableau de bord" />
@@ -44,6 +44,29 @@ export default function Dashboard({ kpis, fileAction, courriersParMois, activite
                     </div>
                 )}
             </div>
+
+            {/* ── Bannière d'alertes d'inactivité ── */}
+            {courriersBlockes.length > 0 && (
+                <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl">
+                    <div className="flex items-center gap-2 mb-3">
+                        <AlertTriangle size={15} className="text-red-400" />
+                        <h3 className="text-sm font-semibold text-red-300">
+                            {courriersBlockes.length} dossier{courriersBlockes.length > 1 ? 's' : ''} bloqué{courriersBlockes.length > 1 ? 's' : ''} depuis plus de 48h
+                        </h3>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        {courriersBlockes.map(c => (
+                            <Link key={c.id} href={route('courriers.show', c.id)}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 border border-red-500/15 rounded-lg text-xs text-red-300 hover:bg-red-500/20 transition-colors">
+                                <span className="font-mono">{c.numero}</span>
+                                <span className="text-red-500">·</span>
+                                <span className="truncate max-w-[160px]">{c.objet}</span>
+                                <span className="ml-1 text-red-500 font-mono">{c.heures}h</span>
+                            </Link>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* KPI Grid */}
             <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">

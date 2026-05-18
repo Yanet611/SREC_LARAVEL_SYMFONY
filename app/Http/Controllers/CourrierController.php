@@ -18,7 +18,16 @@ class CourrierController extends Controller
 {
     public function index(Request $request): Response
     {
+        $user = auth()->user();
+        $isRecteur    = $user->hasRole('recteur');
+        $isDirectrice = $user->hasRole('directrice');
+
         $query = Courrier::with('soumisParUser', 'prisEnChargeParUser')
+            // Le Recteur ne voit que les courriers ENTRANTS à son niveau ou déjà décidés
+            ->when($isRecteur, fn($q) => $q->where('sens', '!=', 'sortant')
+                ->whereIn('statut', ['soumis_recteur', 'valide', 'rejete', 'archive']))
+            // La Directrice ne voit que les courriers ENTRANTS (informée par notification pour les sortants)
+            ->when($isDirectrice, fn($q) => $q->where('sens', '!=', 'sortant'))
             ->when($request->filled('statut'),  fn($q) => $q->where('statut', $request->statut))
             ->when($request->filled('sens'),    fn($q) => $q->where('sens', $request->sens))
             ->when($request->filled('type'),    fn($q) => $q->where('type', $request->type))
@@ -47,12 +56,12 @@ class CourrierController extends Controller
         $validated = $request->validate([
             'objet'        => 'required|string|max:255',
             'sens'         => 'required|in:entrant,sortant',
-            'type'         => 'required|in:demande_partenariat,demande_convention,invitation,information,autre',
+            'type'         => 'required|in:demande_partenariat,demande_convention,invitation,information,autre,rendez_vous',
             'date_courrier' => 'required|date',
             'expediteur'   => 'required|string|max:255',
             'destinataire' => 'required|string|max:255',
             'observations' => 'nullable|string',
-            'piece_jointe' => 'nullable|file|mimes:pdf|max:10240',
+            'piece_jointe' => 'nullable|required_if:type,demande_convention|file|mimes:pdf|max:10240',
         ]);
 
         $validated['soumis_par'] = auth()->id();
@@ -69,15 +78,26 @@ class CourrierController extends Controller
         $courrier = Courrier::create($validated);
         Historique::enregistrer($courrier, 'created', null, 'soumis_directrice', 'Courrier créé et soumis à la Directrice');
 
-        // Notifier immédiatement la Directrice
+        // Notifier la Directrice
         $directrice = User::role('directrice')->first();
         if ($directrice) {
-            NotificationSrec::envoyer(
-                $directrice->id,
-                "Nouveau courrier — {$courrier->numero}",
-                "Un nouveau courrier a été enregistré par le secrétariat : « {$courrier->objet} » (de {$courrier->expediteur}). Votre prise en charge est attendue.",
-                'action_requise', 'haute', $courrier
-            );
+            if ($validated['sens'] === 'sortant') {
+                // Courrier sortant → notification informative uniquement (pas d'action requise)
+                NotificationSrec::envoyer(
+                    $directrice->id,
+                    "Courrier sortant — {$courrier->numero}",
+                    "Le secrétariat a enregistré un courrier sortant : « {$courrier->objet} » destiné à {$courrier->destinataire}. Ce courrier est géré par le secrétariat.",
+                    'info', 'normale', $courrier
+                );
+            } else {
+                // Courrier entrant → action requise
+                NotificationSrec::envoyer(
+                    $directrice->id,
+                    "Nouveau courrier — {$courrier->numero}",
+                    "Un nouveau courrier a été enregistré par le secrétariat : « {$courrier->objet} » (de {$courrier->expediteur}). Votre prise en charge est attendue.",
+                    'action_requise', 'haute', $courrier
+                );
+            }
         }
 
         return redirect()->route('courriers.show', $courrier)
@@ -86,10 +106,22 @@ class CourrierController extends Controller
 
     public function show(Courrier $courrier): Response
     {
+        $user = auth()->user();
+
+        // Recteur et Directrice ne peuvent pas accéder aux courriers sortants
+        if ($courrier->sens === 'sortant' && ($user->hasRole('recteur') || $user->hasRole('directrice'))) {
+            abort(403, 'Les courriers sortants ne sont pas accessibles à votre rôle.');
+        }
+
+        // Le Recteur ne peut pas accéder aux dossiers qui ne lui ont pas encore été soumis
+        if ($user->hasRole('recteur') && !in_array($courrier->statut, ['soumis_recteur', 'valide', 'rejete', 'archive'])) {
+            abort(403, 'Ce courrier n\'a pas encore été soumis au Recteur.');
+        }
+
         $courrier->load('soumisParUser', 'prisEnChargeParUser', 'partenaires', 'conventions', 'rendezVous.rapport');
         $historique = $courrier->historiques()
             ->with('user')
-            ->latest('created_at')
+            ->oldest('created_at')
             ->get()
             ->map(fn($h) => [
                 'id'             => $h->id,
@@ -155,7 +187,7 @@ class CourrierController extends Controller
         $data = ['statut' => $nouveauStatut];
 
         // Si prise en charge → enregistrer qui
-        if ($nouveauStatut === 'en_cours') {
+        if ($nouveauStatut === 'examine_directrice') {
             $data['pris_en_charge_par'] = auth()->id();
         }
 
@@ -177,7 +209,7 @@ class CourrierController extends Controller
         $this->envoyerNotification($courrier, $ancienStatut, $nouveauStatut, $request->commentaire);
 
         $message = match($nouveauStatut) {
-            'en_cours'          => 'Courrier pris en charge.',
+            'examine_directrice' => 'Courrier pris en charge.',
             'rdv_planifie'      => 'Statut mis à jour.',
             'entretien_realise' => 'Rapport soumis. Vous pouvez maintenant transmettre au Recteur.',
             'soumis_recteur'    => 'Courrier soumis au Recteur pour décision.',
@@ -185,6 +217,20 @@ class CourrierController extends Controller
             'rejete'            => 'Courrier rejeté et archivé automatiquement.',
             default             => 'Statut mis à jour.',
         };
+
+        // Après validation d'une demande de partenariat → rediriger vers création du partenaire
+        if ($nouveauStatut === 'valide'
+            && $courrier->type === 'demande_partenariat'
+            && $courrier->partenaires()->count() === 0
+        ) {
+            $nomPredefini = urlencode($courrier->expediteur);
+            return redirect()
+                ->route('partenaires.create', [
+                    'source_courrier_id' => $courrier->id,
+                    'nom_predefini'      => $courrier->expediteur,
+                ])
+                ->with('success', $message . ' Créez maintenant le profil du partenaire.');
+        }
 
         return back()->with('success', $message);
     }
@@ -232,7 +278,7 @@ class CourrierController extends Controller
 
         switch ($nouveau) {
             // Prise en charge → pas de notification externe
-            case 'en_cours':
+            case 'examine_directrice':
                 break;
 
             // RDV planifié → notifier le Secrétariat
@@ -248,7 +294,7 @@ class CourrierController extends Controller
                     NotificationSrec::envoyer(
                         $sec->id,
                         "{$titre} — Rendez-vous planifié",
-                        "La Directrice a planifié un rendez-vous pour le courrier « {$courrier->objet} ».\n📅 Date : {$dateRdv}{$lieu}\n\nUne convocation doit être envoyée au partenaire ({$courrier->expediteur}).",
+                        "La Directrice a planifié un rendez-vous pour le courrier « {$courrier->objet} ».\n- Date : {$dateRdv}{$lieu}\n\nUne convocation doit être envoyée au partenaire ({$courrier->expediteur}).",
                         'action_requise', 'haute', $courrier
                     );
                 }
@@ -267,23 +313,25 @@ class CourrierController extends Controller
                 }
                 break;
 
-            // Soumis au Recteur → notifier le Recteur UNIQUEMENT
+            // Soumis au Recteur → notifier UNIQUEMENT si courrier entrant
             case 'soumis_recteur':
-                $recteur = User::role('recteur')->first();
-                if ($recteur) {
-                    NotificationSrec::envoyer(
-                        $recteur->id,
-                        "{$titre} — Décision requise",
-                        "La Directrice vous soumet le dossier « {$courrier->objet} » pour décision finale (validation ou rejet). Rapport d'entretien joint.",
-                        'action_requise', 'urgente', $courrier
-                    );
+                if ($courrier->sens !== 'sortant') {
+                    $recteur = User::role('recteur')->first();
+                    if ($recteur) {
+                        NotificationSrec::envoyer(
+                            $recteur->id,
+                            "{$titre} — Décision requise",
+                            "La Directrice vous soumet le dossier « {$courrier->objet} » pour décision finale (validation ou rejet).",
+                            'action_requise', 'urgente', $courrier
+                        );
+                    }
                 }
                 break;
 
             // Décision finale → notifier Directrice + Secrétariat
             case 'valide':
             case 'rejete':
-                $label = $nouveau === 'valide' ? '✅ Validé' : '❌ Rejeté';
+                $label = $nouveau === 'valide' ? 'Validé' : 'Rejeté';
                 $msg   = $nouveau === 'valide'
                     ? "Le Recteur a validé le dossier « {$courrier->objet} »."
                     : "Le Recteur a rejeté le dossier « {$courrier->objet} ». Le courrier a été archivé automatiquement." . ($commentaire ? "\nMotif : {$commentaire}" : '');

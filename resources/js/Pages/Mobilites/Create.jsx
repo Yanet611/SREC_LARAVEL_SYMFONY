@@ -19,9 +19,9 @@ const Field = ({ label, error, required, children }) => (
     </div>
 );
 
-export default function Create({ conventions }) {
+export default function Create({ conventions, convention_id_predefini }) {
     const { data, setData, post, processing, errors } = useForm({
-        convention_id:         '',
+        convention_id:         convention_id_predefini || '',
         nom_beneficiaire:      '',
         email_beneficiaire:    '',
         telephone_beneficiaire:'',
@@ -37,6 +37,10 @@ export default function Create({ conventions }) {
         montant_financement:   '',
         observations:          '',
     });
+
+    const conventionLiee = convention_id_predefini
+        ? conventions.find(c => c.id == convention_id_predefini)
+        : null;
 
     const submit = e => { e.preventDefault(); post(route('mobilites.store')); };
 
@@ -69,13 +73,26 @@ export default function Create({ conventions }) {
 
                     <div className="grid sm:grid-cols-2 gap-4">
                         <div className="sm:col-span-2">
+                            {conventionLiee && (
+                                <div className="mb-3 bg-blue-900/20 border border-blue-700/30 rounded-xl p-3 flex items-center gap-3">
+                                    <Plane size={14} className="text-blue-400 flex-shrink-0" />
+                                    <div>
+                                        <p className="text-xs text-slate-400">Convention liée automatiquement</p>
+                                        <p className="text-sm font-semibold text-white">{conventionLiee.reference} — {conventionLiee.intitule}</p>
+                                    </div>
+                                </div>
+                            )}
                             <Field label="Convention" error={errors.convention_id} required>
-                                <select className="input" value={data.convention_id} onChange={e => setData('convention_id', e.target.value)}>
-                                    <option value="">Sélectionner une convention...</option>
-                                    {conventions.map(c => (
-                                        <option key={c.id} value={c.id}>{c.reference} — {c.intitule}</option>
-                                    ))}
-                                </select>
+                                {conventionLiee ? (
+                                    <input type="text" className="input opacity-60 cursor-not-allowed" value={`${conventionLiee.reference} — ${conventionLiee.intitule}`} readOnly />
+                                ) : (
+                                    <select className="input" value={data.convention_id} onChange={e => setData('convention_id', e.target.value)}>
+                                        <option value="">Sélectionner une convention...</option>
+                                        {conventions.map(c => (
+                                            <option key={c.id} value={c.id}>{c.reference} — {c.intitule}</option>
+                                        ))}
+                                    </select>
+                                )}
                             </Field>
                         </div>
                         <Field label="Sens de la mobilité" error={errors.type_mobilite} required>

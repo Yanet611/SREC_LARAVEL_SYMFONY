@@ -6,26 +6,29 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Convention extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'partenaire_id', 'courrier_id', 'reference', 'intitule', 'type',
         'date_signature', 'date_debut', 'date_fin', 'reconductible',
-        'creee_par', 'soumise_par', 'decidee_par',
+        'creee_par', 'soumise_par', 'decidee_par', 'signe_par',
         'statut', 'document_pdf', 'description', 'motif_rejet', 'observations',
         'archive', 'date_archivage',
+        'date_signature_electronique', 'signature_token',
     ];
 
     protected $casts = [
-        'date_signature' => 'date',
-        'date_debut'     => 'date',
-        'date_fin'       => 'date',
-        'reconductible'  => 'boolean',
-        'archive'        => 'boolean',
-        'date_archivage' => 'datetime',
+        'date_signature'               => 'date',
+        'date_debut'                   => 'date',
+        'date_fin'                     => 'date',
+        'reconductible'                => 'boolean',
+        'archive'                      => 'boolean',
+        'date_archivage'               => 'datetime',
+        'date_signature_electronique'  => 'datetime',
     ];
 
     // ─── Relations ───────────────────────────────────────────────────────────

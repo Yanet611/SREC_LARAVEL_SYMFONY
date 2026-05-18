@@ -1,6 +1,6 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, useForm } from '@inertiajs/react';
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Save, ImagePlus } from 'lucide-react';
 
 const TYPES = [
     { value: 'universite', label: 'Université' },
@@ -11,6 +11,14 @@ const TYPES = [
     { value: 'autre', label: 'Autre' },
 ];
 
+const Field = ({ label, error, required, children }) => (
+    <div className="form-group">
+        <label className="label">{label} {required && <span className="text-red-400">*</span>}</label>
+        {children}
+        {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
+    </div>
+);
+
 export default function Create({ source_courrier_id, nom_predefini }) {
     const { data, setData, post, processing, errors } = useForm({
         courrier_id: source_courrier_id || '',
@@ -18,17 +26,10 @@ export default function Create({ source_courrier_id, nom_predefini }) {
         pays: '', ville: '', adresse: '', site_web: '', email: '', telephone: '',
         contact_nom: '', contact_fonction: '', contact_email: '', contact_telephone: '',
         notes: '',
+        logo: null,
     });
 
-    const submit = e => { e.preventDefault(); post(route('partenaires.store')); };
-
-    const Field = ({ label, error, required, children }) => (
-        <div className="form-group">
-            <label className="label">{label} {required && <span className="text-red-400">*</span>}</label>
-            {children}
-            {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
-        </div>
-    );
+    const submit = e => { e.preventDefault(); post(route('partenaires.store'), { forceFormData: true }); };
 
     return (
         <AppLayout title="Nouveau partenaire">
@@ -55,7 +56,26 @@ export default function Create({ source_courrier_id, nom_predefini }) {
                     <div className="lg:col-span-2 space-y-6">
                         {/* Identité */}
                         <div className="card-glass p-6">
-                            <h3 className="text-sm font-semibold text-white mb-5">Identité de l'institution</h3>
+                            <div className="flex items-start justify-between mb-5">
+                                <h3 className="text-sm font-semibold text-white">Identité de l'institution</h3>
+                                <div className="text-right">
+                                    <label className="flex flex-col items-center justify-center w-16 h-16 rounded-full border-2 border-dashed border-white/20 hover:border-srec-500/50 cursor-pointer overflow-hidden bg-white/5 transition-colors group relative">
+                                        {data.logo ? (
+                                            <img src={URL.createObjectURL(data.logo)} alt="Preview" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <ImagePlus size={20} className="text-slate-400 group-hover:text-srec-400 transition-colors" />
+                                        )}
+                                        <input type="file" accept="image/*" className="hidden" onChange={e => setData('logo', e.target.files[0])} />
+                                        {data.logo && (
+                                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                                <ImagePlus size={16} className="text-white" />
+                                            </div>
+                                        )}
+                                    </label>
+                                    <span className="text-[10px] text-slate-500 mt-1 block">Logo (opt)</span>
+                                    {errors.logo && <p className="text-xs text-red-400 mt-1">{errors.logo}</p>}
+                                </div>
+                            </div>
                             <div className="grid sm:grid-cols-2 gap-4">
                                 <Field label="Nom complet" error={errors.nom} required>
                                     <input type="text" className="input" placeholder="Ex: Université de Paris" value={data.nom} onChange={e => setData('nom', e.target.value)} />

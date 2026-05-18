@@ -9,11 +9,25 @@ use App\Models\Mobilite;
 use App\Models\Partenaire;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class DemoDataSeeder extends Seeder
 {
     public function run(): void
     {
+        // ── Nettoyage des anciennes données (sauf utilisateurs/rôles) ──────
+        Schema::disableForeignKeyConstraints();
+        DB::table('historiques')->truncate();
+        DB::table('notifications_srec')->truncate();
+        DB::table('rendez_vous')->truncate();
+        DB::table('activites')->truncate();
+        DB::table('mobilites')->truncate();
+        DB::table('conventions')->truncate();
+        DB::table('partenaires')->truncate();
+        DB::table('courriers')->truncate();
+        Schema::enableForeignKeyConstraints();
+
         $secretariat = User::where('email', 'secretariat@srec-uganc.gn')->first();
         $directrice  = User::where('email', 'directrice@srec-uganc.gn')->first();
         $recteur     = User::where('email', 'recteur@srec-uganc.gn')->first();
@@ -22,64 +36,63 @@ class DemoDataSeeder extends Seeder
         $courriers = [
             [
                 'numero'       => 'SREC-2026-001',
-                'objet'        => 'Demande de partenariat académique - Université de Paris',
+                'objet'        => 'Nouvelle proposition de partenariat avec UADB',
                 'sens'         => 'entrant',
                 'type'         => 'demande_partenariat',
-                'date_courrier' => '2026-04-15',
-                'expediteur'   => 'Université de Paris - Bureau des Relations Internationales',
+                'date_courrier' => '2026-05-10',
+                'expediteur'   => 'Université Alioune Diop de Bambey',
                 'destinataire' => 'SREC - UGANC',
                 'soumis_par'   => $secretariat->id,
                 'statut'       => 'soumis_directrice',
             ],
             [
                 'numero'       => 'SREC-2026-002',
-                'objet'        => 'Invitation au Forum Africain sur l\'Enseignement Supérieur',
+                'objet'        => 'Invitation au colloque international sur l\'IA',
                 'sens'         => 'entrant',
                 'type'         => 'invitation',
-                'date_courrier' => '2026-04-20',
-                'expediteur'   => 'Union Africaine - Département Éducation',
+                'date_courrier' => '2026-05-12',
+                'expediteur'   => 'Ministère de l\'Enseignement Supérieur',
                 'destinataire' => 'Recteur UGANC',
                 'soumis_par'   => $secretariat->id,
-                'statut'       => 'soumis_recteur',
+                'statut'       => 'soumis_directrice',
             ],
             [
                 'numero'       => 'SREC-2026-003',
-                'objet'        => 'Accord de coopération avec l\'Institut Supérieur de Dakar',
+                'objet'        => 'Projet d\'accord cadre - Université de Montréal',
                 'sens'         => 'entrant',
                 'type'         => 'demande_convention',
-                'date_courrier' => '2026-05-02',
-                'expediteur'   => 'Institut Supérieur de Dakar',
+                'date_courrier' => '2026-05-14',
+                'expediteur'   => 'Université de Montréal',
                 'destinataire' => 'SREC - UGANC',
                 'soumis_par'   => $secretariat->id,
-                'statut'       => 'recu',
+                'statut'       => 'soumis_directrice',
             ],
             [
                 'numero'       => 'SREC-2026-004',
-                'objet'        => 'Réponse à la demande de stage - Ministère de l\'Éducation',
-                'sens'         => 'sortant',
+                'objet'        => 'Demande d\'informations sur les mobilités ERASMUS',
+                'sens'         => 'entrant',
                 'type'         => 'information',
-                'date_courrier' => '2026-05-05',
-                'expediteur'   => 'SREC - UGANC',
-                'destinataire' => 'Ministère de l\'Enseignement Supérieur de Guinée',
+                'date_courrier' => '2026-05-15',
+                'expediteur'   => 'Campus France',
+                'destinataire' => 'SREC - UGANC',
                 'soumis_par'   => $secretariat->id,
-                'pris_en_charge_par' => $directrice->id,
-                'statut'       => 'valide',
+                'statut'       => 'soumis_directrice',
             ],
             [
                 'numero'       => 'SREC-2026-005',
-                'objet'        => 'Demande de renouvellement de convention - OIF',
+                'objet'        => 'Renouvellement de convention AUF',
                 'sens'         => 'entrant',
                 'type'         => 'demande_convention',
-                'date_courrier' => '2026-05-08',
-                'expediteur'   => 'Organisation Internationale de la Francophonie',
+                'date_courrier' => '2026-05-16',
+                'expediteur'   => 'Agence Universitaire de la Francophonie',
                 'destinataire' => 'SREC - UGANC',
                 'soumis_par'   => $secretariat->id,
-                'statut'       => 'pris_en_charge',
+                'statut'       => 'soumis_directrice',
             ],
         ];
 
         foreach ($courriers as $data) {
-            Courrier::firstOrCreate(['numero' => $data['numero']], $data);
+            Courrier::create($data);
         }
 
         // ── Partenaires ──────────────────────────────────────────────────────

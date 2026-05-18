@@ -6,9 +6,20 @@ const TYPES = [
     { value: 'demande_partenariat', label: 'Demande de partenariat' },
     { value: 'demande_convention',  label: 'Demande de convention' },
     { value: 'invitation',          label: 'Invitation' },
+    { value: 'rendez_vous',         label: 'Rendez-vous' },
     { value: 'information',         label: 'Information' },
     { value: 'autre',               label: 'Autre' },
 ];
+
+const Field = ({ label, error, required, children }) => (
+    <div className="form-group">
+        <label className="label">
+            {label} {required && <span className="text-red-400">*</span>}
+        </label>
+        {children}
+        {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
+    </div>
+);
 
 export default function Create({ prefill = null }) {
     const isConvocation = !!prefill;
@@ -28,16 +39,6 @@ export default function Create({ prefill = null }) {
         e.preventDefault();
         post(route('courriers.store'), { forceFormData: true });
     };
-
-    const Field = ({ label, error, required, children }) => (
-        <div className="form-group">
-            <label className="label">
-                {label} {required && <span className="text-red-400">*</span>}
-            </label>
-            {children}
-            {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
-        </div>
-    );
 
     return (
         <AppLayout title={isConvocation ? 'Créer une convocation' : 'Nouveau courrier'}>
@@ -128,10 +129,13 @@ export default function Create({ prefill = null }) {
                             <h3 className="text-sm font-semibold text-white mb-5">Contenu</h3>
                             <div className="space-y-4">
                                 <Field label="Objet du courrier" error={errors.objet} required>
-                                    <input type="text" className="input"
-                                        placeholder="Ex: Convocation — Rendez-vous du 20 mai 2026"
+                                    <input
+                                        type="text"
+                                        className="input"
+                                        placeholder="Saisir l'objet exact du courrier..."
                                         value={data.objet}
-                                        onChange={e => setData('objet', e.target.value)} />
+                                        onChange={e => setData('objet', e.target.value)}
+                                    />
                                 </Field>
                                 <Field label="Observations / Corps du message" error={errors.observations}>
                                     <textarea className="input resize-none" rows={5}
@@ -147,7 +151,9 @@ export default function Create({ prefill = null }) {
                     <div className="space-y-4">
                         {/* Pièce jointe */}
                         <div className="card-glass p-5">
-                            <h3 className="text-sm font-semibold text-white mb-4">Pièce jointe</h3>
+                            <h3 className="text-sm font-semibold text-white mb-4">
+                                Pièce jointe {data.type === 'demande_convention' && <span className="text-red-400 ml-1">*</span>}
+                            </h3>
                             <label className="flex flex-col items-center gap-3 p-6 border-2 border-dashed border-white/15 rounded-xl hover:border-srec-500/40 cursor-pointer transition-colors group">
                                 <Upload size={24} className="text-slate-600 group-hover:text-srec-400 transition-colors" />
                                 <div className="text-center">
@@ -161,6 +167,9 @@ export default function Create({ prefill = null }) {
                                     onChange={e => setData('piece_jointe', e.target.files[0])} />
                             </label>
                             {errors.piece_jointe && <p className="text-xs text-red-400 mt-2">{errors.piece_jointe}</p>}
+                            {data.type === 'demande_convention' && !data.piece_jointe && (
+                                <p className="text-[10px] text-amber-400/80 mt-2 text-center">Fichier requis pour ce type de courrier</p>
+                            )}
                         </div>
 
                         {/* Récap */}

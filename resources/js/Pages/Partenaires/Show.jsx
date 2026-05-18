@@ -1,5 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import { StatusBadge } from '@/Components/Ui';
 import { ArrowLeft, Globe, Mail, Phone, Edit2, Plus, FileText, GraduationCap, HeartHandshake, Landmark, Briefcase, ClipboardList } from 'lucide-react';
 
@@ -14,6 +14,8 @@ const TYPE_ICONS = {
 const CONV_COLORS = { brouillon:'gray', soumise_directrice:'yellow', soumise_recteur:'yellow', approuvee:'green', rejetee:'red', revision:'orange', signee:'green', expiree:'slate', archive:'slate' };
 
 export default function Show({ partenaire }) {
+    const { auth } = usePage().props;
+    const isRecteur = auth?.user?.roles?.[0]?.name === 'recteur';
     const InfoRow = ({ icon: Icon, label, value, href }) => {
         if (!value) return null;
         return (
@@ -36,9 +38,13 @@ export default function Show({ partenaire }) {
 
             <div className="mb-6">
                 <Link href={route('partenaires.index')} className="btn-ghost mb-3 -ml-1"><ArrowLeft size={15} /> Retour</Link>
-                <div className="flex flex-wrap items-start gap-4">
-                    <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center flex-shrink-0">
-                        {TYPE_ICONS[partenaire.type] ?? TYPE_ICONS['autre']}
+                <div className="flex flex-wrap items-start gap-5">
+                    <div className="w-20 h-20 rounded-full bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center flex-shrink-0 border border-white/10 overflow-hidden shadow-inner">
+                        {partenaire.logo_url ? (
+                            <img src={partenaire.logo_url} alt={partenaire.nom} className="w-full h-full object-cover" />
+                        ) : (
+                            <span className="font-bold text-3xl text-white/50">{partenaire.sigle ? partenaire.sigle.substring(0, 2) : partenaire.nom.substring(0, 2).toUpperCase()}</span>
+                        )}
                     </div>
                     <div className="flex-1">
                         <div className="flex items-center gap-3 mb-1">
@@ -50,7 +56,9 @@ export default function Show({ partenaire }) {
                             <StatusBadge color={partenaire.statut === 'actif' ? 'green' : 'gray'} label={partenaire.statut} />
                         </div>
                     </div>
-                    <Link href={route('partenaires.edit', partenaire.id)} className="btn-secondary"><Edit2 size={14} /> Modifier</Link>
+                    {!isRecteur && (
+                        <Link href={route('partenaires.edit', partenaire.id)} className="btn-secondary"><Edit2 size={14} /> Modifier</Link>
+                    )}
                 </div>
             </div>
 
@@ -105,7 +113,9 @@ export default function Show({ partenaire }) {
                     <div className="card-glass p-6">
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="text-sm font-semibold text-white">Conventions ({partenaire.conventions?.length ?? 0})</h3>
-                            <Link href={route('conventions.create')} className="btn-secondary text-xs py-1 px-3"><Plus size={12} /> Nouvelle</Link>
+                            {!isRecteur && (
+                                <Link href={route('conventions.create', { partenaire_id: partenaire.id })} className="btn-secondary text-xs py-1 px-3"><Plus size={12} /> Nouvelle</Link>
+                            )}
                         </div>
                         {partenaire.conventions?.length === 0 ? (
                             <p className="text-sm text-slate-500 text-center py-4">Aucune convention enregistrée.</p>

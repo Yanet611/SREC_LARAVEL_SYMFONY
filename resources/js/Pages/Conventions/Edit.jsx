@@ -18,47 +18,42 @@ const Field = ({ label, error, required, children }) => (
     </div>
 );
 
-export default function Create({ partenaires, source_courrier_id, partenaire_id_predefini }) {
+export default function Edit({ convention, partenaires }) {
     const { data, setData, post, processing, errors } = useForm({
-        courrier_id: source_courrier_id || '',
-        partenaire_id: partenaire_id_predefini || '',
-        intitule: '',
-        type: 'accord_cadre',
-        date_debut: '',
-        date_fin: '',
-        reconductible: false,
-        description: '',
+        _method: 'PUT',
+        intitule: convention.intitule || '',
+        type: convention.type || 'accord_cadre',
+        date_debut: convention.date_debut ? convention.date_debut.split('T')[0] : '',
+        date_fin: convention.date_fin ? convention.date_fin.split('T')[0] : '',
+        reconductible: !!convention.reconductible,
+        description: convention.description || '',
         document_pdf: null,
     });
 
-    const submit = e => { e.preventDefault(); post(route('conventions.store'), { forceFormData: true }); };
+    const submit = e => { 
+        e.preventDefault(); 
+        post(route('conventions.update', convention.id), { forceFormData: true }); 
+    };
 
-    const selected = partenaires.find(p => p.id == data.partenaire_id);
+    const selected = partenaires.find(p => p.id === convention.partenaire_id);
 
     return (
-        <AppLayout title="Nouvelle convention">
-            <Head title="Nouvelle convention" />
+        <AppLayout title="Modifier la convention">
+            <Head title="Modifier la convention" />
             <div className="page-header">
                 <div>
-                    <Link href={route('conventions.index')} className="btn-ghost mb-3 -ml-1"><ArrowLeft size={15} /> Retour</Link>
-                    <h2 className="page-title">Nouvelle convention</h2>
-                    <p className="page-subtitle">Créer un nouvel accord ou protocole avec un partenaire</p>
+                    <Link href={route('conventions.show', convention.id)} className="btn-ghost mb-3 -ml-1">
+                        <ArrowLeft size={15} /> Retour
+                    </Link>
+                    <h2 className="page-title">Modifier la convention</h2>
+                    <p className="page-subtitle">Mise à jour des informations du document (Réf: {convention.reference})</p>
                 </div>
             </div>
-
-            {source_courrier_id && (
-                <div className="bg-blue-500/10 border border-blue-500/20 text-blue-400 p-4 rounded-xl mb-6 text-sm flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center flex-shrink-0">
-                        <Save size={14} />
-                    </div>
-                    <p>Cette convention sera automatiquement liée au courrier sélectionné.</p>
-                </div>
-            )}
 
             <form onSubmit={submit} encType="multipart/form-data">
                 <div className="grid lg:grid-cols-3 gap-6">
                     <div className="lg:col-span-2 space-y-6">
-                        {/* Partenaire */}
+                        {/* Partenaire (Lecture seule) */}
                         <div className="card-glass p-6">
                             <div className="flex items-center gap-3 pb-2 mb-5 border-b border-white/5">
                                 <div className="w-10 h-10 rounded-xl bg-srec-600/20 flex items-center justify-center">
@@ -66,40 +61,18 @@ export default function Create({ partenaires, source_courrier_id, partenaire_id_
                                 </div>
                                 <div>
                                     <p className="text-sm font-semibold text-white">Partenaire concerné</p>
-                                    <p className="text-xs text-slate-500">Sélectionnez le partenaire de cette convention</p>
+                                    <p className="text-xs text-slate-500">Le partenaire ne peut pas être modifié après création.</p>
                                 </div>
                             </div>
                             
-                            {partenaire_id_predefini && selected && (
-                                <div className="mb-4 bg-srec-900/50 border border-srec-700/30 rounded-xl p-4 flex items-center gap-3">
+                            {selected && (
+                                <div className="bg-srec-900/50 border border-srec-700/30 rounded-xl p-4 flex items-center gap-3">
                                     <div className="w-8 h-8 rounded-lg bg-srec-600/20 flex items-center justify-center flex-shrink-0">
                                         <Handshake size={14} className="text-srec-400" />
                                     </div>
                                     <div>
-                                        <p className="text-xs text-slate-400">Partenaire lié automatiquement</p>
                                         <p className="text-sm font-semibold text-white">{selected.nom}</p>
-                                    </div>
-                                </div>
-                            )}
-
-                            <Field label="Sélectionner le partenaire" error={errors.partenaire_id} required>
-                                {partenaire_id_predefini && selected ? (
-                                    <input type="text" className="input opacity-60 cursor-not-allowed" value={`${selected.nom} — ${selected.pays}`} readOnly />
-                                ) : (
-                                    <select className="input" value={data.partenaire_id} onChange={e => setData('partenaire_id', e.target.value)}>
-                                        <option value="">-- Choisir un partenaire --</option>
-                                        {partenaires.map(p => (
-                                            <option key={p.id} value={p.id}>{p.nom}{p.sigle ? ` (${p.sigle})` : ''} — {p.pays}</option>
-                                        ))}
-                                    </select>
-                                )}
-                            </Field>
-                            {!partenaire_id_predefini && selected && (
-                                <div className="mt-3 flex items-center gap-3 p-3 bg-srec-950/50 rounded-xl border border-srec-800/40">
-                                    <div className="w-9 h-9 rounded-lg bg-srec-700/30 flex items-center justify-center text-lg"><Handshake size={18} className="text-srec-400" /></div>
-                                    <div>
-                                        <p className="text-sm font-semibold text-white">{selected.nom}</p>
-                                        <p className="text-xs text-slate-500">{selected.pays}</p>
+                                        <p className="text-xs text-slate-400">{selected.pays}</p>
                                     </div>
                                 </div>
                             )}
@@ -149,26 +122,32 @@ export default function Create({ partenaires, source_courrier_id, partenaire_id_
                     <div className="space-y-4">
                         <div className="card-glass p-5">
                             <h3 className="text-sm font-semibold text-white mb-4">Document PDF</h3>
+                            
+                            {convention.document_pdf && (
+                                <div className="mb-4 p-3 bg-white/5 rounded-lg border border-white/10 text-xs">
+                                    <p className="text-slate-400 mb-2">Document actuel :</p>
+                                    <a href={`/storage/${convention.document_pdf}`} target="_blank" rel="noreferrer" className="text-blue-400 hover:underline break-all">
+                                        Voir le document existant
+                                    </a>
+                                </div>
+                            )}
+
                             <label className="flex flex-col items-center gap-3 p-5 border-2 border-dashed border-white/15 rounded-xl hover:border-srec-500/40 cursor-pointer transition-colors group">
                                 <Upload size={22} className="text-slate-600 group-hover:text-srec-400 transition-colors" />
                                 <div className="text-center">
-                                    <p className="text-xs font-medium text-slate-300">Joindre le texte</p>
+                                    <p className="text-xs font-medium text-slate-300">Remplacer le fichier</p>
                                     <p className="text-xs text-slate-600 mt-0.5">PDF, max 20 MB</p>
                                 </div>
                                 {data.document_pdf && <span className="badge badge-green text-[10px]">{data.document_pdf.name}</span>}
                                 <input type="file" accept=".pdf" className="hidden" onChange={e => setData('document_pdf', e.target.files[0])} />
                             </label>
+                            {errors.document_pdf && <p className="text-xs text-red-400 mt-2">{errors.document_pdf}</p>}
                         </div>
 
                         <div className="card-glass p-5">
-                            <h3 className="text-sm font-semibold text-white mb-3">Résumé</h3>
-                            <div className="space-y-2 text-xs text-slate-400 mb-5">
-                                <div className="flex justify-between"><span>Statut initial</span><span className="badge badge-gray">Brouillon</span></div>
-                                <div className="flex justify-between"><span>Type</span><span className="text-slate-200">{TYPES.find(t => t.value === data.type)?.label}</span></div>
-                                <div className="flex justify-between"><span>Reconductible</span><span className="text-slate-200">{data.reconductible ? 'Oui' : 'Non'}</span></div>
-                            </div>
+                            <h3 className="text-sm font-semibold text-white mb-3">Sauvegarde</h3>
                             <button type="submit" disabled={processing} className="btn-primary w-full justify-center">
-                                <Save size={15} /> {processing ? 'Création...' : 'Créer la convention'}
+                                <Save size={15} /> {processing ? 'Mise à jour...' : 'Enregistrer les modifications'}
                             </button>
                         </div>
                     </div>

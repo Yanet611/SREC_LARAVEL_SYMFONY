@@ -1,5 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { StatusBadge, EmptyState, Pagination } from '@/Components/Ui';
 import { useState } from 'react';
 import { Plane, Plus, Search, Filter, X, ArrowDownLeft, ArrowUpRight, CalendarDays, Globe, User } from 'lucide-react';
@@ -19,6 +19,8 @@ const TYPES_MOB   = ['', 'entrant', 'sortant'];
 const TYPES_BENEF = ['', 'etudiant', 'enseignant', 'chercheur', 'personnel_admin'];
 
 export default function Index({ mobilites, conventions, filtres }) {
+    const { auth } = usePage().props;
+    const isRecteur = auth?.user?.roles?.[0]?.name === 'recteur';
     const [search,           setSearch]           = useState(filtres.search ?? '');
     const [statut,           setStatut]           = useState(filtres.statut ?? '');
     const [typeMobilite,     setTypeMobilite]     = useState(filtres.type_mobilite ?? '');
@@ -50,9 +52,11 @@ export default function Index({ mobilites, conventions, filtres }) {
                     <h2 className="page-title">Mobilités académiques</h2>
                     <p className="page-subtitle">{mobilites.total} mobilité{mobilites.total > 1 ? 's' : ''} enregistrée{mobilites.total > 1 ? 's' : ''}</p>
                 </div>
-                <Link href={route('mobilites.create')} className="btn-primary">
-                    <Plus size={15} /> Nouvelle mobilité
-                </Link>
+                {!isRecteur && (
+                    <Link href={route('mobilites.create')} className="btn-primary">
+                        <Plus size={15} /> Nouvelle mobilité
+                    </Link>
+                )}
             </div>
 
             {/* Filtres */}
@@ -82,7 +86,7 @@ export default function Index({ mobilites, conventions, filtres }) {
                             icon={Plane}
                             title="Aucune mobilité trouvée"
                             description="Enregistrez un flux de mobilité lié à une convention active."
-                            action={<Link href={route('mobilites.create')} className="btn-primary"><Plus size={14} /> Nouvelle mobilité</Link>}
+                            action={!isRecteur && <Link href={route('mobilites.create')} className="btn-primary"><Plus size={14} /> Nouvelle mobilité</Link>}
                         />
                     </div>
                 ) : (

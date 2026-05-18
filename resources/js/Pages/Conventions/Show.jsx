@@ -2,7 +2,7 @@ import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { StatusBadge, Timeline, Modal } from '@/Components/Ui';
 import { useState, useEffect } from 'react';
-import { ArrowLeft, SendHorizonal, CheckCircle2, XCircle, RotateCcw, FileText, Activity, Plane, Handshake } from 'lucide-react';
+import { ArrowLeft, SendHorizonal, CheckCircle2, XCircle, RotateCcw, FileText, Activity, Plane, Handshake, Plus, PenTool, ShieldCheck } from 'lucide-react';
 
 const STATUT_COLORS = {
     brouillon:'gray', soumise_directrice:'yellow', soumise_recteur:'yellow',
@@ -21,7 +21,7 @@ const TRANSITIONS = {
         { to: 'revision',  label: 'Demander révision',   color: 'orange', icon: RotateCcw },
     ],
     revision:            [{ to: 'soumise_directrice', label: 'Resoumettre', color: 'yellow', icon: SendHorizonal }],
-    approuvee:           [{ to: 'signee', label: 'Marquer comme signée', color: 'green', icon: CheckCircle2 }],
+    approuvee:           [], // Géré par le bouton Signature Numérique du Recteur
 };
 
 function ActionModal({ open, onClose, transition, conventionId }) {
@@ -77,7 +77,14 @@ function ActionModal({ open, onClose, transition, conventionId }) {
 export default function Show({ convention, historique }) {
     const { auth } = usePage().props;
     const userRole = auth?.user?.roles?.[0]?.name ?? '';
-    const [modal, setModal] = useState(null);
+    const [modal, setModal]             = useState(null);
+    const [signerLoading, setSignerLoading] = useState(false);
+    const { post: postSigner, processing: signing } = useForm();
+
+    const handleSigner = () => {
+        if (!window.confirm('Vous êtes sur le point d\'apposer votre signature électronique officielle sur cette convention. Cette action est irréversible. Confirmer ?')) return;
+        postSigner(route('conventions.signer', convention.id));
+    };
 
     const currentTransitions = TRANSITIONS[convention.statut] ?? [];
 
@@ -128,6 +135,18 @@ export default function Show({ convention, historique }) {
                                 </button>
                             );
                         })}
+
+                        {/* Bouton Signature Numérique (Recteur uniquement, sur convention approuvée non signée) */}
+                        {convention.statut === 'approuvee' && !convention.signature_token && ['recteur', 'admin'].includes(userRole) && (
+                            <button
+                                onClick={handleSigner}
+                                disabled={signing}
+                                className="btn-success flex items-center gap-2 animate-pulse"
+                            >
+                                <PenTool size={14} />
+                                {signing ? 'Signature en cours...' : '✍️ Apposer ma signature électronique'}
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
@@ -185,54 +204,127 @@ export default function Show({ convention, historique }) {
                     )}
 
                     {/* Activités */}
-                    {convention.activites?.length > 0 && (
-                        <div className="card-glass p-5">
-                            <div className="flex items-center justify-between mb-4">
-                                <div className="flex items-center gap-2">
-                                    <Activity size={15} className="text-slate-500" />
-                                    <h3 className="text-sm font-semibold text-white">Activités ({convention.activites.length})</h3>
-                                </div>
+                    <div className="card-glass p-5">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                                <Activity size={15} className="text-slate-500" />
+                                <h3 className="text-sm font-semibold text-white">Activités ({convention.activites?.length ?? 0})</h3>
                             </div>
+                            {['approuvee', 'signee'].includes(convention.statut) && userRole !== 'recteur' && (
+                                <Link
+                                    href={route('activites.create', { convention_id: convention.id })}
+                                    className="btn-secondary text-xs py-1 px-3"
+                                >
+                                    <Plus size={12} /> Nouvelle activité
+                                </Link>
+                            )}
+                        </div>
+                        {convention.activites?.length === 0 ? (
+                            <p className="text-sm text-slate-500 text-center py-4">Aucune activité enregistrée.</p>
+                        ) : (
                             <div className="space-y-2">
-                                {convention.activites.map(a => (
-                                    <div key={a.id} className="flex items-center gap-3 p-3 bg-white/5 rounded-xl">
+                                {convention.activites?.map(a => (
+                                    <Link key={a.id} href={route('activites.show', a.id)} className="flex items-center gap-3 p-3 bg-white/5 rounded-xl hover:bg-white/10 transition-colors group">
                                         <div className="flex-1">
-                                            <p className="text-sm font-medium text-slate-200">{a.titre}</p>
+                                            <p className="text-sm font-medium text-slate-200 group-hover:text-white">{a.titre}</p>
                                             <p className="text-xs text-slate-500">{a.type} · {new Date(a.date_debut).toLocaleDateString('fr-FR')}</p>
                                         </div>
                                         <span className={`badge ${a.statut === 'realisee' ? 'badge-green' : a.statut === 'planifiee' ? 'badge-blue' : 'badge-gray'}`}>
                                             {a.statut}
                                         </span>
-                                    </div>
+                                    </Link>
                                 ))}
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
 
                     {/* Mobilités */}
-                    {convention.mobilites?.length > 0 && (
-                        <div className="card-glass p-5">
-                            <div className="flex items-center gap-2 mb-4">
+                    <div className="card-glass p-5">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
                                 <Plane size={15} className="text-slate-500" />
-                                <h3 className="text-sm font-semibold text-white">Mobilités ({convention.mobilites.length})</h3>
+                                <h3 className="text-sm font-semibold text-white">Mobilités ({convention.mobilites?.length ?? 0})</h3>
                             </div>
+                            {['approuvee', 'signee'].includes(convention.statut) && userRole !== 'recteur' && (
+                                <Link
+                                    href={route('mobilites.create', { convention_id: convention.id })}
+                                    className="btn-secondary text-xs py-1 px-3"
+                                >
+                                    <Plus size={12} /> Nouvelle mobilité
+                                </Link>
+                            )}
+                        </div>
+                        {convention.mobilites?.length === 0 ? (
+                            <p className="text-sm text-slate-500 text-center py-4">Aucune mobilité enregistrée.</p>
+                        ) : (
                             <div className="space-y-2">
-                                {convention.mobilites.map(m => (
-                                    <div key={m.id} className="flex items-center gap-3 p-3 bg-white/5 rounded-xl">
+                                {convention.mobilites?.map(m => (
+                                    <Link key={m.id} href={route('mobilites.show', m.id)} className="flex items-center gap-3 p-3 bg-white/5 rounded-xl hover:bg-white/10 transition-colors group">
                                         <div className="flex-1">
-                                            <p className="text-sm font-medium text-slate-200">{m.nom_beneficiaire}</p>
+                                            <p className="text-sm font-medium text-slate-200 group-hover:text-white">{m.nom_beneficiaire}</p>
                                             <p className="text-xs text-slate-500">{m.type_mobilite} · {m.pays_destination}</p>
                                         </div>
                                         <span className="font-mono text-xs text-srec-400">{m.reference}</span>
-                                    </div>
+                                    </Link>
                                 ))}
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
 
                 {/* Sidebar */}
                 <div className="space-y-4">
+                    {/* Tampon de Signature Numérique */}
+                    {convention.signature_token && (
+                        <div className="card-glass p-5 border border-emerald-500/30 bg-emerald-950/20">
+                            <div className="flex items-center gap-2 mb-4">
+                                <ShieldCheck size={16} className="text-emerald-400" />
+                                <h3 className="text-sm font-semibold text-emerald-300">Signature électronique</h3>
+                            </div>
+                            {/* Tampon visuel */}
+                            <div className="flex justify-center mb-4">
+                                <div className="relative w-40 h-40">
+                                    {/* Cercle extérieur */}
+                                    <div className="absolute inset-0 rounded-full border-4 border-emerald-500/60 flex items-center justify-center">
+                                        <div className="absolute inset-2 rounded-full border-2 border-emerald-500/30" />
+                                        <div className="text-center z-10 px-4">
+                                            <CheckCircle2 size={22} className="text-emerald-400 mx-auto mb-1" />
+                                            <p className="text-[9px] font-bold text-emerald-300 uppercase tracking-widest leading-tight">CERTIFIÉ</p>
+                                            <p className="text-[8px] text-emerald-500 leading-tight">SREC — UGANC</p>
+                                        </div>
+                                    </div>
+                                    {/* Étoile décorative */}
+                                    {[...Array(8)].map((_,i) => (
+                                        <div key={i}
+                                            className="absolute w-1.5 h-1.5 bg-emerald-500/50 rounded-full"
+                                            style={{
+                                                top: `${50 - 46 * Math.cos((i * 45 * Math.PI) / 180)}%`,
+                                                left: `${50 + 46 * Math.sin((i * 45 * Math.PI) / 180)}%`,
+                                                transform: 'translate(-50%,-50%)'
+                                            }}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="space-y-2 text-xs">
+                                <div className="flex justify-between">
+                                    <span className="text-slate-500">Signé le</span>
+                                    <span className="text-emerald-300 font-medium">
+                                        {convention.date_signature_electronique
+                                            ? new Date(convention.date_signature_electronique).toLocaleString('fr-FR')
+                                            : '—'}
+                                    </span>
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    <span className="text-slate-500">Token de vérification</span>
+                                    <span className="font-mono text-[9px] text-emerald-600 break-all bg-white/5 p-2 rounded">
+                                        {convention.signature_token?.substring(0, 32)}...
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="card-glass p-5">
                         <h3 className="text-sm font-semibold text-white mb-4">Statut actuel</h3>
                         <StatusBadge color={STATUT_COLORS[convention.statut]} label={convention.statut_label} />

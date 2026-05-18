@@ -2,20 +2,28 @@ import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { StatusBadge, EmptyState, Pagination } from '@/Components/Ui';
 import { useState } from 'react';
-import { Mail, Plus, Search, Filter, X, Download } from 'lucide-react';
+import { Mail, Plus, Search, Filter, X, Download, Calendar } from 'lucide-react';
 
 const STATUTS = [
     { value: '', label: 'Tous les statuts' },
-    { value: 'soumis', label: 'Soumis' },
-    { value: 'recu', label: 'Reçu' },
-    { value: 'pris_en_charge', label: 'Pris en charge' },
+    { value: 'soumis_directrice', label: 'En attente (Directrice)' },
+    { value: 'examine_directrice', label: 'Pris en charge' },
     { value: 'rdv_planifie', label: 'RDV planifié' },
-    { value: 'soumis_directrice', label: 'Soumis (Directrice)' },
-    { value: 'soumis_recteur', label: 'Soumis (Recteur)' },
+    { value: 'entretien_realise', label: 'Entretien réalisé' },
+    { value: 'soumis_recteur', label: 'En attente (Recteur)' },
     { value: 'valide', label: 'Validé' },
     { value: 'rejete', label: 'Rejeté' },
     { value: 'archive', label: 'Archivé' },
 ];
+
+const TYPES_LABELS = {
+    demande_partenariat: 'Partenariat',
+    demande_convention:  'Convention',
+    invitation:          'Invitation',
+    rendez_vous:         'Rendez-vous',
+    information:         'Information',
+    autre:               'Autre',
+};
 
 const COLORS = {
     soumis: 'blue', recu: 'blue', pris_en_charge: 'orange',
@@ -32,21 +40,23 @@ export default function Index({ courriers, filtres }) {
     const [search, setSearch] = useState(filtres.search ?? '');
     const [statut, setStatut] = useState(filtres.statut ?? '');
     const [sens, setSens] = useState(filtres.sens ?? '');
+    const [type, setType] = useState(filtres.type ?? '');
 
     const applyFilters = (params = {}) => {
         router.get(route('courriers.index'), {
             search: params.search ?? search,
             statut: params.statut ?? statut,
             sens:   params.sens ?? sens,
+            type:   params.type  ?? type,
         }, { preserveState: true, replace: true });
     };
 
     const resetFilters = () => {
-        setSearch(''); setStatut(''); setSens('');
+        setSearch(''); setStatut(''); setSens(''); setType('');
         router.get(route('courriers.index'));
     };
 
-    const hasFilters = search || statut || sens;
+    const hasFilters = search || statut || sens || type;
 
     return (
         <AppLayout title="Courriers">
@@ -94,15 +104,29 @@ export default function Index({ courriers, filtres }) {
                     {STATUTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
 
-                {/* Sens */}
+                {/* Sens — Recteur et Directrice ne voient que les entrants */}
+                {!['recteur', 'directrice'].includes(userRole) && (
+                    <select
+                        value={sens}
+                        onChange={e => { setSens(e.target.value); applyFilters({ sens: e.target.value }); }}
+                        className="input w-auto min-w-32"
+                    >
+                        <option value="">Tous (sens)</option>
+                        <option value="entrant">Entrant</option>
+                        <option value="sortant">Sortant</option>
+                    </select>
+                )}
+
+                {/* Type */}
                 <select
-                    value={sens}
-                    onChange={e => { setSens(e.target.value); applyFilters({ sens: e.target.value }); }}
-                    className="input w-auto min-w-32"
+                    value={type}
+                    onChange={e => { setType(e.target.value); applyFilters({ type: e.target.value }); }}
+                    className="input w-auto min-w-40"
                 >
-                    <option value="">Tous (sens)</option>
-                    <option value="entrant">Entrant</option>
-                    <option value="sortant">Sortant</option>
+                    <option value="">Tous (type)</option>
+                    {Object.entries(TYPES_LABELS).map(([val, lbl]) => (
+                        <option key={val} value={val}>{lbl}</option>
+                    ))}
                 </select>
 
                 <button onClick={() => applyFilters()} className="btn-primary">
@@ -150,6 +174,14 @@ export default function Index({ courriers, filtres }) {
                                         </td>
                                         <td className="max-w-xs">
                                             <p className="truncate font-medium text-slate-200">{c.objet}</p>
+                                            <span className={`text-[10px] font-medium mt-0.5 inline-flex items-center gap-1 ${
+                                                c.type === 'rendez_vous' ? 'text-orange-400' :
+                                                c.type === 'demande_partenariat' ? 'text-srec-400' :
+                                                c.type === 'demande_convention' ? 'text-blue-400' : 'text-slate-500'
+                                            }`}>
+                                                {c.type === 'rendez_vous' && <Calendar size={10} />}
+                                                {TYPES_LABELS[c.type] ?? c.type}
+                                            </span>
                                         </td>
                                         <td>
                                             <span className={`badge ${c.sens === 'entrant' ? 'badge-blue' : 'badge-purple'}`}>

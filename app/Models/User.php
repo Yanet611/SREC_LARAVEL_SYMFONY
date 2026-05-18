@@ -28,6 +28,11 @@ class User extends Authenticatable
         'remember_token',
     ];
 
+    protected $appends = [
+        'avatar_url',
+        'role_display',
+    ];
+
     protected function casts(): array
     {
         return [
@@ -95,6 +100,16 @@ class User extends Authenticatable
             $this->hasRole('secretariat') => 'Secrétariat',
             default                       => 'Utilisateur',
         };
+    }
+
+    public function getAvatarUrlAttribute(): string
+    {
+        if ($this->avatar) {
+            return asset('storage/' . $this->avatar);
+        }
+
+        $name = urlencode($this->name);
+        return "https://ui-avatars.com/api/?name={$name}&background=1e293b&color=38bdf8&rounded=true&bold=true";
     }
 
     public function getDashboardRouteAttribute(): string

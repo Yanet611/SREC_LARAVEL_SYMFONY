@@ -23,7 +23,7 @@ const Field = ({ label, error, required, hint, children }) => (
 export default function Edit({ user, roles }) {
     const primaryRole = user.roles?.[0]?.name ?? (roles[0] ?? '');
 
-    const { data, setData, put, processing, errors } = useForm({
+    const { data, setData, post, processing, errors } = useForm({
         name:                  user.name ?? '',
         email:                 user.email ?? '',
         password:              '',
@@ -33,9 +33,11 @@ export default function Edit({ user, roles }) {
         service:               user.service ?? '',
         role:                  primaryRole,
         actif:                 user.actif ?? true,
+        avatar:                null,
+        _method:               'put',
     });
 
-    const submit = e => { e.preventDefault(); put(route('users.update', user.id)); };
+    const submit = e => { e.preventDefault(); post(route('users.update', user.id), { forceFormData: true }); };
 
     return (
         <AppLayout title={`Modifier — ${user.name}`}>
@@ -62,6 +64,27 @@ export default function Edit({ user, roles }) {
                             <div>
                                 <p className="text-sm font-semibold text-white">Identité</p>
                                 <p className="text-xs text-slate-500">Modifiez les informations du compte</p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-6 pb-2">
+                            <div className="relative group">
+                                <div className="w-16 h-16 rounded-full bg-slate-800 p-0.5 border border-white/10 group-hover:border-srec-400/50 transition-colors shadow-lg overflow-hidden flex items-center justify-center">
+                                    {data.avatar ? (
+                                        <img src={URL.createObjectURL(data.avatar)} className="w-full h-full rounded-full object-cover" alt="Preview" />
+                                    ) : (
+                                        <img src={user.avatar_url} className="w-full h-full rounded-full object-cover" alt={user.name} />
+                                    )}
+                                </div>
+                                <label className="absolute inset-0 flex items-center justify-center bg-black/50 text-white opacity-0 group-hover:opacity-100 cursor-pointer rounded-full transition-opacity text-[10px] font-medium text-center leading-tight p-1">
+                                    Modifier
+                                    <input type="file" className="hidden" accept="image/*" onChange={e => setData('avatar', e.target.files[0])} />
+                                </label>
+                            </div>
+                            <div className="flex-1">
+                                <p className="text-sm text-slate-300">Photo de profil (Optionnel)</p>
+                                <p className="text-xs text-slate-500">Format JPG ou PNG, max 2Mo.</p>
+                                {errors.avatar && <p className="text-xs text-red-400 mt-1">{errors.avatar}</p>}
                             </div>
                         </div>
 

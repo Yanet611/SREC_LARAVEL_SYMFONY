@@ -1,5 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { StatusBadge, EmptyState, Pagination } from '@/Components/Ui';
 import { useState } from 'react';
 import { FileText, Plus, Search, Filter, X } from 'lucide-react';
@@ -20,6 +20,8 @@ const STATUTS = [
 ];
 
 export default function Index({ conventions, partenaires, filtres }) {
+    const { auth } = usePage().props;
+    const isRecteur = auth?.user?.roles?.[0]?.name === 'recteur';
     const [search, setSearch] = useState(filtres.search ?? '');
     const [statut, setStatut] = useState(filtres.statut ?? '');
     const [partenaire, setPartenaire] = useState(filtres.partenaire ?? '');
@@ -40,7 +42,9 @@ export default function Index({ conventions, partenaires, filtres }) {
                     <h2 className="page-title">Conventions</h2>
                     <p className="page-subtitle">{conventions.total} convention{conventions.total > 1 ? 's' : ''}</p>
                 </div>
-                <Link href={route('conventions.create')} className="btn-primary"><Plus size={15} /> Nouvelle convention</Link>
+                {!isRecteur && (
+                    <Link href={route('conventions.create')} className="btn-primary"><Plus size={15} /> Nouvelle convention</Link>
+                )}
             </div>
 
             {/* Filtres */}
@@ -66,7 +70,7 @@ export default function Index({ conventions, partenaires, filtres }) {
             <div className="card-glass overflow-hidden">
                 {conventions.data.length === 0 ? (
                     <div className="p-4">
-                        <EmptyState icon={FileText} title="Aucune convention" description="Commencez par créer une convention." action={<Link href={route('conventions.create')} className="btn-primary"><Plus size={14} /> Nouvelle convention</Link>} />
+                        <EmptyState icon={FileText} title="Aucune convention" description="Aucune convention enregistrée." action={!isRecteur && <Link href={route('conventions.create')} className="btn-primary"><Plus size={14} /> Nouvelle convention</Link>} />
                     </div>
                 ) : (
                     <div className="overflow-x-auto">

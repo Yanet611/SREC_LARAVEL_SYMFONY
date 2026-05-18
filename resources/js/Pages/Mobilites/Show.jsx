@@ -1,5 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import { StatusBadge } from '@/Components/Ui';
 import {
     ArrowLeft, Edit, CalendarDays, Globe, User, Plane,
@@ -17,6 +17,8 @@ const BENEF_LABELS = {
 };
 
 export default function Show({ mobilite }) {
+    const { auth } = usePage().props;
+    const isRecteur = auth?.user?.roles?.[0]?.name === 'recteur';
     const isEntrant = mobilite.type_mobilite === 'entrant';
 
     const InfoRow = ({ icon: Icon, label, value }) => value ? (
@@ -52,9 +54,11 @@ export default function Show({ mobilite }) {
                         </div>
                     </div>
                 </div>
-                <Link href={route('mobilites.edit', mobilite.id)} className="btn-secondary">
-                    <Edit size={14} /> Modifier
-                </Link>
+                {!isRecteur && (
+                    <Link href={route('mobilites.edit', mobilite.id)} className="btn-secondary">
+                        <Edit size={14} /> Modifier
+                    </Link>
+                )}
             </div>
 
             <div className="grid lg:grid-cols-3 gap-6">

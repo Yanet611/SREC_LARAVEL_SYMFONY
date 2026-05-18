@@ -4,10 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class RendezVous extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $table = 'rendez_vous';
 
@@ -15,6 +16,7 @@ class RendezVous extends Model
         'courrier_id',
         'organise_par',
         'date_heure',
+        'type_rdv',
         'lieu',
         'ordre_du_jour',
         'statut',

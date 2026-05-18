@@ -2,6 +2,14 @@ import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { ArrowLeft, Save } from 'lucide-react';
 
+const Field = ({ label, error, required, children }) => (
+    <div className="form-group">
+        <label className="label">{label} {required && <span className="text-red-400">*</span>}</label>
+        {children}
+        {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
+    </div>
+);
+
 export default function Edit({ courrier }) {
     const { data, setData, patch, processing, errors } = useForm({
         objet:        courrier.objet,
@@ -11,14 +19,6 @@ export default function Edit({ courrier }) {
     });
 
     const submit = e => { e.preventDefault(); patch(route('courriers.update', courrier.id)); };
-
-    const Field = ({ label, error, required, children }) => (
-        <div className="form-group">
-            <label className="label">{label} {required && <span className="text-red-400">*</span>}</label>
-            {children}
-            {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
-        </div>
-    );
 
     return (
         <AppLayout title={`Modifier ${courrier.numero}`}>

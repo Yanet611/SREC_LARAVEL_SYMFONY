@@ -10,7 +10,7 @@ import {
 
 const STATUT_COLORS = {
     soumis_directrice: 'yellow',
-    en_cours:          'orange',
+    examine_directrice: 'orange',
     rdv_planifie:      'orange',
     entretien_realise: 'purple',
     soumis_recteur:    'yellow',
@@ -22,7 +22,7 @@ const STATUT_COLORS = {
 // Labels lisibles pour chaque statut
 const STATUT_LABELS = {
     soumis_directrice: 'En attente — Directrice',
-    en_cours:          'Pris en charge',
+    examine_directrice: 'Pris en charge',
     rdv_planifie:      'RDV planifié',
     entretien_realise: 'Entretien réalisé',
     soumis_recteur:    'En attente — Recteur',
@@ -31,24 +31,69 @@ const STATUT_LABELS = {
     archive:           'Archivé',
 };
 
-// Machine à états : chaque statut n'expose qu'une seule action à la fois
-const TRANSITIONS = {
-    soumis_directrice: [
-        { to: 'en_cours', label: 'Prendre en charge', color: 'orange', icon: UserCheck, roles: ['directrice', 'admin'] },
-    ],
-    en_cours: [
-        { to: 'rdv_planifie', label: 'Planifier un Rendez-vous', color: 'primary', icon: Calendar, roles: ['directrice', 'admin'], action: 'rdv' },
-    ],
-    rdv_planifie: [
-        { to: 'entretien_realise', label: 'Soumettre le rapport du RDV', color: 'purple', icon: FileText, roles: ['directrice', 'admin'], action: 'rapport' },
-    ],
-    entretien_realise: [
-        { to: 'soumis_recteur', label: 'Soumettre au Recteur', color: 'warning', icon: SendHorizonal, roles: ['directrice', 'admin'] },
-    ],
-    soumis_recteur: [
-        { to: 'valide',  label: 'Valider',  color: 'success', icon: CheckCircle2, roles: ['recteur', 'admin'] },
-        { to: 'rejete',  label: 'Rejeter',  color: 'danger',  icon: XCircle,      roles: ['recteur', 'admin'] },
-    ],
+// Machine à états dynamique selon le sens et le type du courrier
+const getTransitions = (courrier, dernier_rdv) => {
+    const isSortant      = courrier.sens === 'sortant';
+    const isPartenariat  = courrier.type === 'demande_partenariat';
+    const isRdvRealise = dernier_rdv?.statut === 'realise';
+    
+    const rdvTransitions = isRdvRealise 
+        ? [{ to: 'entretien_realise', label: 'Soumettre le rapport du RDV', color: 'purple', icon: FileText, roles: ['directrice'], action: 'rapport' }]
+        : [{ to: 'rdv_planifie', label: 'Marquer le RDV comme réalisé', color: 'primary', icon: CheckCircle2, roles: ['directrice'], action: 'marquer_rdv_realise' }];
+
+    // Courrier SORTANT : workflow simplifié (Directrice prend connaissance, Recteur n'intervient pas)
+    if (isSortant) {
+        return {
+            soumis_directrice:  [{ to: 'examine_directrice', label: 'Prendre connaissance', color: 'orange', icon: UserCheck, roles: ['directrice'] }],
+            examine_directrice: [],
+        };
+    }
+
+    // Courrier ENTRANT — DEMANDE DE PARTENARIAT : workflow complet avec RDV
+    if (isPartenariat) {
+        return {
+            soumis_directrice:  [{ to: 'examine_directrice', label: 'Prendre en charge', color: 'orange', icon: UserCheck, roles: ['directrice'] }],
+            examine_directrice: [{ to: 'rdv_planifie', label: 'Planifier un Rendez-vous', color: 'primary', icon: Calendar, roles: ['directrice'], action: 'rdv' }],
+            rdv_planifie:       rdvTransitions,
+            entretien_realise:  [{ to: 'soumis_recteur', label: 'Soumettre au Recteur', color: 'warning', icon: SendHorizonal, roles: ['directrice'] }],
+            soumis_recteur:     [], // Géré par le bloc personnalisé du Recteur
+        };
+    }
+
+    // Courrier ENTRANT — DEMANDE DE CONVENTION : lecture obligatoire, sans RDV
+    if (courrier.type === 'demande_convention') {
+        return {
+            soumis_directrice:  [{ to: 'examine_directrice', label: 'Prendre en charge', color: 'orange', icon: UserCheck, roles: ['directrice'] }],
+            examine_directrice: [], // Géré par le bloc personnalisé Directrice
+            soumis_recteur:     [], // Géré par le bloc personnalisé du Recteur
+        };
+    }
+
+    // Courrier ENTRANT — RENDEZ-VOUS : workflow direct (pas de recteur, RDV dès la prise en charge)
+    if (courrier.type === 'rendez_vous') {
+        return {
+            soumis_directrice:  [{ to: 'examine_directrice', label: 'Prendre en charge', color: 'orange', icon: UserCheck, roles: ['directrice'] }],
+            examine_directrice: [{ to: 'rdv_planifie', label: 'Planifier le Rendez-vous', color: 'primary', icon: Calendar, roles: ['directrice'], action: 'rdv' }],
+            rdv_planifie:       rdvTransitions,
+            entretien_realise:  [{ to: 'valide', label: 'Clôturer le dossier', color: 'success', icon: CheckCircle2, roles: ['directrice'] }],
+        };
+    }
+
+    // Courrier ENTRANT — INVITATION : Workflow rapide
+    if (courrier.type === 'invitation') {
+        return {
+            soumis_directrice:  [{ to: 'examine_directrice', label: 'Prendre en charge', color: 'orange', icon: UserCheck, roles: ['directrice'] }],
+            examine_directrice: [{ to: 'soumis_recteur', label: 'Accepter à mon niveau', color: 'success', icon: SendHorizonal, roles: ['directrice'] }],
+            soumis_recteur:     [], // Géré par le bloc personnalisé du Recteur
+        };
+    }
+
+    // Courrier ENTRANT — AUTRE TYPE (ex: information) : pas de RDV, directrice soumet directement au Recteur
+    return {
+        soumis_directrice:  [{ to: 'examine_directrice', label: 'Prendre en charge', color: 'orange', icon: UserCheck, roles: ['directrice'] }],
+        examine_directrice: [{ to: 'soumis_recteur', label: 'Soumettre au Recteur', color: 'warning', icon: SendHorizonal, roles: ['directrice'] }],
+        soumis_recteur:     [], // Géré par le bloc personnalisé du Recteur
+    };
 };
 
 function TransitionModal({ open, onClose, transition, courrierId }) {
@@ -102,10 +147,100 @@ function TransitionModal({ open, onClose, transition, courrierId }) {
     );
 }
 
+function RapportViewModal({ open, onClose, rapport, rdv, onFileClick }) {
+    if (!open || !rapport) return null;
+
+    const DECISION_LABELS = {
+        favorable: { label: '✅ Favorable', color: 'text-green-400 bg-green-500/10 border-green-500/20' },
+        defavorable: { label: '❌ Défavorable', color: 'text-red-400 bg-red-500/10 border-red-500/20' },
+        en_attente: { label: '⏳ En attente', color: 'text-amber-400 bg-amber-500/10 border-amber-500/20' },
+    };
+    const dec = DECISION_LABELS[rapport.decision_recommandee] ?? DECISION_LABELS['en_attente'];
+    const isPdf = rapport.fichier && rapport.fichier.toLowerCase().endsWith('.pdf');
+
+    return (
+        <Modal open={open} onClose={onClose} title="Rapport de Rendez-vous" size={isPdf ? 'xl' : 'md'}>
+            <div className={isPdf ? "grid lg:grid-cols-2 gap-6" : "space-y-5"}>
+                {/* Colonne détails */}
+                <div className="space-y-5">
+                    {/* Décision */}
+                    <div className={`flex items-center gap-3 p-3 rounded-xl border ${dec.color}`}>
+                        <span className={`text-sm font-semibold ${dec.color.split(' ')[0]}`}>
+                            Décision recommandée : {dec.label}
+                        </span>
+                    </div>
+
+                    {/* Compte rendu */}
+                    <div>
+                        <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Compte rendu</p>
+                        <div className="p-4 bg-white/5 rounded-xl text-sm text-slate-200 leading-relaxed whitespace-pre-wrap">
+                            {rapport.compte_rendu}
+                        </div>
+                    </div>
+
+                    {/* Observations */}
+                    {rapport.observations && (
+                        <div>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Observations complémentaires</p>
+                            <div className="p-4 bg-white/5 rounded-xl text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">
+                                {rapport.observations}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Fichier non-pdf fallback */}
+                    {!isPdf && rapport.fichier && (
+                        <a href={`/storage/${rapport.fichier}`} target="_blank" rel="noopener noreferrer"
+                            onClick={() => onFileClick && onFileClick()}
+                            className="flex items-center gap-3 p-3 bg-white/5 rounded-xl hover:bg-white/10 transition-colors group">
+                            <div className="w-9 h-9 bg-red-600/20 rounded-lg flex items-center justify-center">
+                                <FileText size={16} className="text-red-400" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-slate-200">Document joint</p>
+                                <p className="text-xs text-slate-500">Cliquer pour télécharger/ouvrir</p>
+                            </div>
+                        </a>
+                    )}
+                </div>
+
+                {/* Colonne PDF */}
+                {isPdf && (
+                    <div className="flex flex-col h-[500px] border border-white/10 rounded-xl overflow-hidden bg-white/5">
+                        <div className="bg-srec-800/50 p-2 border-b border-white/10 flex items-center gap-2">
+                            <FileText size={14} className="text-red-400" />
+                            <span className="text-xs font-semibold text-white">Aperçu du document PDF</span>
+                        </div>
+                        <iframe
+                            src={`/storage/${rapport.fichier}`}
+                            className="w-full flex-1"
+                            title="Rapport PDF"
+                            onLoad={() => onFileClick && onFileClick()}
+                        />
+                    </div>
+                )}
+            </div>
+
+            <div className="flex justify-end mt-6">
+                <button onClick={onClose} className="btn-secondary">Fermer</button>
+            </div>
+        </Modal>
+    );
+}
+
 function CreateRdvModal({ open, onClose, courrier }) {
+    const TYPE_RDV_OPTIONS = [
+        { value: 'en_presentiel', label: '🏢 En présentiel' },
+        { value: 'en_video',      label: '📹 En vidéo' },
+        { value: 'en_ligne',      label: '💻 En ligne' },
+        { value: 'par_telephone', label: '📞 Par téléphone' },
+        { value: 'autre',         label: '🔹 Autre' },
+    ];
+
     const { data, setData, post, processing, errors, reset } = useForm({
         courrier_id:   courrier.id,
         date_heure:    '',
+        type_rdv:      'en_presentiel',
         lieu:          '',
         ordre_du_jour: '',
         notes:         '',
@@ -135,16 +270,26 @@ function CreateRdvModal({ open, onClose, courrier }) {
             <form onSubmit={submit} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                     <div className="form-group">
-                        <label className="label">Date & Heure <span className="text-red-400">*</span></label>
+                        <label className="label">Date &amp; Heure <span className="text-red-400">*</span></label>
                         <input type="datetime-local" className="input" value={data.date_heure}
                             onChange={e => setData('date_heure', e.target.value)} required />
                         {errors.date_heure && <p className="text-xs text-red-400 mt-1">{errors.date_heure}</p>}
                     </div>
                     <div className="form-group">
-                        <label className="label">Lieu</label>
-                        <input type="text" className="input" placeholder="Ex: Salle SREC..." value={data.lieu}
-                            onChange={e => setData('lieu', e.target.value)} />
+                        <label className="label">Type de RDV <span className="text-red-400">*</span></label>
+                        <select className="input" value={data.type_rdv}
+                            onChange={e => setData('type_rdv', e.target.value)} required>
+                            {TYPE_RDV_OPTIONS.map(o => (
+                                <option key={o.value} value={o.value}>{o.label}</option>
+                            ))}
+                        </select>
+                        {errors.type_rdv && <p className="text-xs text-red-400 mt-1">{errors.type_rdv}</p>}
                     </div>
+                </div>
+                <div className="form-group">
+                    <label className="label">Lieu</label>
+                    <input type="text" className="input" placeholder="Ex: Salle SREC, Zoom..." value={data.lieu}
+                        onChange={e => setData('lieu', e.target.value)} />
                 </div>
                 <div className="form-group">
                     <label className="label">Ordre du jour</label>
@@ -204,9 +349,9 @@ function CreateRapportModal({ open, onClose, courrier }) {
                         onChange={e => setData('observations', e.target.value)} />
                 </div>
                 <div className="form-group">
-                    <label className="label">Fichier (PDF, DOC) Optionnel</label>
+                    <label className="label">Fichier (PDF, DOC) <span className="text-red-400">*</span></label>
                     <input type="file" className="input file-input" accept=".pdf,.doc,.docx"
-                        onChange={e => setData('fichier', e.target.files[0])} />
+                        onChange={e => setData('fichier', e.target.files[0])} required />
                     {errors.fichier && <p className="text-xs text-red-400 mt-1">{errors.fichier}</p>}
                 </div>
                 <div className="flex justify-end gap-3 mt-6">
@@ -227,12 +372,32 @@ export default function Show({ courrier, historique, partenaire_potentiel, derni
     const [modal, setModal] = useState(null);
     const [rdvModalOpen, setRdvModalOpen] = useState(false);
     const [rapportModalOpen, setRapportModalOpen] = useState(false);
+    const [rapportViewOpen, setRapportViewOpen] = useState(false);
+    const [rapportLu, setRapportLu] = useState(false);
+    const [documentLu, setDocumentLu] = useState(false);
     const { post: postArchive, processing: archiving } = useForm();
 
-    const currentTransitions = TRANSITIONS[courrier.statut] ?? [];
+    // Transitions disponibles pour le statut actuel, filtrées par rôle et selon type/sens du courrier
+    const TRANSITIONS = getTransitions(courrier, dernier_rdv);
+    const currentTransitions = (TRANSITIONS[courrier.statut] ?? []).filter(t => t.roles.includes(userRole));
+    const hasRapport = !!(dernier_rdv?.rapport);
+    const isSortant = courrier.sens === 'sortant';
 
     const genererBrouillon = (partenaireId) => {
         router.post(route('conventions.brouillon', courrier.id), { partenaire_id: partenaireId });
+    };
+
+    const handleMarquerRdvRealise = () => {
+        if (!dernier_rdv) return;
+        if (confirm('Confirmer que le rendez-vous a bien eu lieu ? Vous pourrez ensuite rédiger le rapport.')) {
+            router.put(route('rendez-vous.update', dernier_rdv.id), {
+                date_heure: dernier_rdv.date_heure,
+                lieu: dernier_rdv.lieu,
+                ordre_du_jour: dernier_rdv.ordre_du_jour,
+                notes: dernier_rdv.notes,
+                statut: 'realise',
+            }, { preserveScroll: true });
+        }
     };
 
     const handleArchiver = () => {
@@ -291,19 +456,21 @@ export default function Show({ courrier, historique, partenaire_potentiel, derni
                         <h2 className="page-title">{courrier.objet}</h2>
                     </div>
 
-                    {/* Actions */}
+                    {/* ═══ ZONE D'ACTIONS — workflow linéaire strict ═══ */}
                     {!courrier.archive && (
                         <div className="flex flex-wrap gap-2">
+
+                            {/* Étape 1 → 4 : boutons pour Directrice (un seul à la fois) */}
                             {currentTransitions.map(t => {
-                                if (!t.roles.includes(userRole)) return null;
                                 const Icon = t.icon;
                                 return (
                                     <button
                                         key={t.to}
                                         onClick={() => {
-                                            if (t.action === 'rdv')     setRdvModalOpen(true);
+                                            if (t.action === 'rdv')          setRdvModalOpen(true);
                                             else if (t.action === 'rapport') setRapportModalOpen(true);
-                                            else setModal(t);
+                                            else if (t.action === 'marquer_rdv_realise') handleMarquerRdvRealise();
+                                            else                             setModal(t);
                                         }}
                                         className={getBtnClass(t.color)}
                                     >
@@ -312,14 +479,113 @@ export default function Show({ courrier, historique, partenaire_potentiel, derni
                                 );
                             })}
 
-                            {/* Bouton Modifier — secrétariat seulement */}
-                            {userRole === 'secretariat' && (
+                            {/* Bloc personnalisé Directrice (pour demande_convention) */}
+                            {courrier.type === 'demande_convention' && courrier.statut === 'examine_directrice' && ['directrice', 'admin'].includes(userRole) && (
+                                <>
+                                    {!documentLu ? (
+                                        <div className="flex items-center gap-3">
+                                            <button 
+                                                onClick={() => {
+                                                    setDocumentLu(true);
+                                                    if (courrier.piece_jointe) window.open(`/storage/${courrier.piece_jointe}`, '_blank');
+                                                }} 
+                                                className="btn-warning animate-pulse"
+                                            >
+                                                <FileText size={14} /> 👁️ Consulter le projet de convention
+                                            </button>
+                                            <span className="text-[11px] text-amber-400/80 italic">Lecture obligatoire avant soumission</span>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <button 
+                                                onClick={() => {
+                                                    if (courrier.piece_jointe) window.open(`/storage/${courrier.piece_jointe}`, '_blank');
+                                                }} 
+                                                className="btn-ghost text-xs"
+                                            >
+                                                <FileText size={13} /> Relire le projet
+                                            </button>
+                                            <button
+                                                onClick={() => setModal({ to: 'soumis_recteur', label: 'Soumettre au Recteur', icon: SendHorizonal, color: 'warning' })}
+                                                className="btn-warning"
+                                            >
+                                                <SendHorizonal size={14} /> Soumettre au Recteur
+                                            </button>
+                                        </>
+                                    )}
+                                </>
+                            )}
+
+                            {/* Recteur — valider/rejeter (UNIQUEMENT si entrant, jamais si sortant) */}
+                            {courrier.statut === 'soumis_recteur' && !isSortant && ['recteur', 'admin'].includes(userRole) && (
+                                <>
+                                    {courrier.type === 'demande_partenariat' && hasRapport && !rapportLu && (
+                                        <div className="flex items-center gap-3">
+                                            <button onClick={() => setRapportViewOpen(true)} className="btn-warning animate-pulse">
+                                                <FileText size={14} /> 📋 Lire le rapport du RDV
+                                            </button>
+                                            <span className="text-[11px] text-amber-400/80 italic">Lecture obligatoire avant décision</span>
+                                        </div>
+                                    )}
+                                    {courrier.type === 'demande_convention' && !documentLu && (
+                                        <div className="flex items-center gap-3">
+                                            <button 
+                                                onClick={() => {
+                                                    setDocumentLu(true);
+                                                    if (courrier.piece_jointe) window.open(`/storage/${courrier.piece_jointe}`, '_blank');
+                                                }} 
+                                                className="btn-warning animate-pulse"
+                                            >
+                                                <FileText size={14} /> 👁️ Lire la convention
+                                            </button>
+                                            <span className="text-[11px] text-amber-400/80 italic">Lecture obligatoire avant décision</span>
+                                        </div>
+                                    )}
+                                    {((courrier.type === 'demande_partenariat' && hasRapport && rapportLu) || 
+                                      (courrier.type === 'demande_convention' && documentLu) || 
+                                      (!['demande_partenariat', 'demande_convention'].includes(courrier.type))) && (
+                                        <>
+                                            {courrier.type === 'demande_partenariat' && hasRapport && (
+                                                <button onClick={() => setRapportViewOpen(true)} className="btn-ghost text-xs">
+                                                    <FileText size={13} /> Relire le rapport
+                                                </button>
+                                            )}
+                                            {courrier.type === 'demande_convention' && (
+                                                <button 
+                                                    onClick={() => {
+                                                        if (courrier.piece_jointe) window.open(`/storage/${courrier.piece_jointe}`, '_blank');
+                                                    }} 
+                                                    className="btn-ghost text-xs"
+                                                >
+                                                    <FileText size={13} /> Relire la convention
+                                                </button>
+                                            )}
+                                            <button
+                                                onClick={() => setModal({ to: 'valide', label: 'Valider le dossier', icon: CheckCircle2, color: 'success' })}
+                                                className="btn-success"
+                                            >
+                                                <CheckCircle2 size={14} /> Valider
+                                            </button>
+                                            <button
+                                                onClick={() => setModal({ to: 'rejete', label: 'Rejeter le dossier', icon: XCircle, color: 'danger' })}
+                                                className="btn-danger"
+                                            >
+                                                <XCircle size={14} /> Rejeter
+                                            </button>
+                                        </>
+                                    )}
+
+                                </>
+                            )}
+
+                            {/* Secrétariat — modifier uniquement */}
+                            {userRole === 'secretariat' && ['soumis_directrice'].includes(courrier.statut) && (
                                 <Link href={route('courriers.edit', courrier.id)} className="btn-secondary">
                                     <Edit2 size={14} /> Modifier
                                 </Link>
                             )}
 
-                            {/* Archivage manuel si validé */}
+                            {/* Archivage manuel après validation */}
                             {courrier.statut === 'valide' && ['directrice', 'admin'].includes(userRole) && (
                                 <button onClick={handleArchiver} disabled={archiving} className="btn-ghost">
                                     <Archive size={14} /> Archiver
@@ -357,7 +623,7 @@ export default function Show({ courrier, historique, partenaire_potentiel, derni
                 )}
 
                 {/* Transformation intelligente (post-validation) */}
-                {!courrier.archive && courrier.statut === 'valide' && userRole === 'directrice' && (
+                {!courrier.archive && courrier.statut === 'valide' && ['directrice', 'recteur', 'admin'].includes(userRole) && (
                     <div className="mt-5 p-4 bg-srec-900/50 border border-srec-500/20 rounded-2xl">
                         <h3 className="text-sm font-semibold text-white mb-3">Suite à donner (Validation Recteur)</h3>
                         {courrier.conventions?.length > 0 ? (
@@ -517,6 +783,13 @@ export default function Show({ courrier, historique, partenaire_potentiel, derni
                 open={rapportModalOpen}
                 onClose={() => setRapportModalOpen(false)}
                 courrier={courrier}
+            />
+            <RapportViewModal
+                open={rapportViewOpen}
+                onClose={() => setRapportViewOpen(false)}
+                rapport={dernier_rdv?.rapport}
+                rdv={dernier_rdv}
+                onFileClick={() => setRapportLu(true)}
             />
         </AppLayout>
     );

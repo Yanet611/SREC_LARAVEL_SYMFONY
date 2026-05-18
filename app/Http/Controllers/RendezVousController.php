@@ -35,6 +35,7 @@ class RendezVousController extends Controller
         $validated = $request->validate([
             'courrier_id'   => 'required|exists:courriers,id',
             'date_heure'    => 'required|date',
+            'type_rdv'      => 'required|in:en_presentiel,en_video,en_ligne,par_telephone,autre',
             'lieu'          => 'nullable|string|max:255',
             'ordre_du_jour' => 'nullable|string',
             'notes'         => 'nullable|string',
@@ -57,7 +58,7 @@ class RendezVousController extends Controller
                 NotificationSrec::envoyer(
                     $sec->id,
                     "RDV planifié — {$courrier->numero}",
-                    "La Directrice a planifié un rendez-vous pour le courrier « {$courrier->objet} ».\n📅 Le {$dateFormatee}{$lieu}.{$odj}\n\n👉 Une convocation doit être envoyée au partenaire : {$courrier->expediteur}",
+                    "La Directrice a planifié un rendez-vous pour le courrier « {$courrier->objet} ».\n- Date : Le {$dateFormatee}{$lieu}.{$odj}\n\n- Action : Une convocation doit être envoyée au partenaire : {$courrier->expediteur}",
                     'action_requise', 'haute', $courrier
                 );
             }
@@ -87,7 +88,7 @@ class RendezVousController extends Controller
             'compte_rendu'         => 'required|string',
             'decision_recommandee' => 'required|in:favorable,defavorable,en_attente',
             'observations'         => 'nullable|string',
-            'fichier'              => 'nullable|file|mimes:pdf,doc,docx|max:10240',
+            'fichier'              => 'required|file|mimes:pdf,doc,docx|max:10240',
         ]);
 
         if ($request->hasFile('fichier')) {
